@@ -20,6 +20,7 @@ namespace DefaceGames.GridLevelDesign
         public GameObject prefab;
         public int rotationSteps;
         public float rotation;
+        public bool freeform;
 
         public float rotationDegrees
         {
@@ -309,6 +310,12 @@ namespace DefaceGames.GridLevelDesign
 
                 for(int i = 0; i < cells.Count; i++)
                 {
+                    // Freeform pieces sit off the grid, so they never occupy or block cells.
+                    if(cells[i].freeform)
+                    {
+                        continue;
+                    }
+
                     GetCoveredCells(cells[i].cell, cells[i].coveredSize, covered);
 
                     for(int c = 0; c < covered.Count; c++)
@@ -327,6 +334,29 @@ namespace DefaceGames.GridLevelDesign
             }
 
             return m_lookup;
+        }
+
+        public bool RaycastPlane(Ray worldRay, out Vector3 localPoint)
+        {
+            localPoint = Vector3.zero;
+            int n = normalAxis;
+            Vector3 origin = transform.InverseTransformPoint(worldRay.origin);
+            Vector3 direction = transform.InverseTransformVector(worldRay.direction);
+
+            if(Mathf.Abs(direction[n]) < 0.000001f)
+            {
+                return false;
+            }
+
+            float t = (layerOffset - origin[n]) / direction[n];
+
+            if(t < 0f)
+            {
+                return false;
+            }
+
+            localPoint = origin + direction * t;
+            return true;
         }
 
         public bool RaycastCell(Ray worldRay, out Vector3Int cell)

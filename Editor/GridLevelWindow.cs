@@ -278,7 +278,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             }
 
             Undo.RecordObject(palette, "Auto Footprint");
-            palette.entries[index].footprint = GridFootprintUtility.Compute(palette.entries[index].prefab, GridFootprintUtility.FindCellSize());
+            palette.entries[index].footprint = GridFootprintUtility.Compute(palette.entries[index].prefab, GridFootprintUtility.FindCellSize(), palette.entries[index].GetScale());
             EditorUtility.SetDirty(palette);
             GridPaletteState.NotifyChanged();
         }

@@ -2,6 +2,24 @@
 
 All notable changes to this package are documented here.
 
+## [0.2.0] - 2026-11-18
+
+### Added
+- Freeform placement: turn **Snap to Grid** off (button or N) to place pieces exactly at the cursor in Paint mode, with an optional Fine snap increment.
+- Freeform with Stack on places pieces on the surface of whatever is under the cursor; with Stack off, placement is blocked where it would overlap an existing piece.
+- Freeform erase: click or drag over pieces to remove the one under the cursor.
+- Scale tool: Scale Down / Scale Up buttons (- and =) with an adjustable step, for the next piece or the selected pieces.
+- Scale setting on each palette entry. The scale tool starts from the selected prefab's scale and resets when a different prefab is picked.
+- Placement type shown in the overlay (GRID or FREEFORM) next to the current piece.
+- Demo scene now includes resized, off-grid pieces: a row of growing pillars and scaled crates.
+
+### Changed
+- Select mode picks the actual object under the cursor and box-selects by on-screen position, so stacked and freeform pieces can be selected directly.
+- The eyedropper (I) picks the exact object under the cursor.
+- Auto Footprint From Bounds takes the entry's Scale into account.
+- Turning Snap to Grid off switches to Paint; in other modes the button shows "(Paint only)".
+- Saved Level Data and JSON exports record whether each piece is freeform.
+
 ## [0.1.0] - 2026-11-18
 
 First public release.

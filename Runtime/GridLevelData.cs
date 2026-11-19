@@ -13,6 +13,7 @@ namespace DefaceGames.GridLevelDesign
         public Vector3Int cell;
         public Vector3Int size;
         public float rotation;
+        public bool freeform;
         public Vector3 localPosition;
         public Quaternion localRotation = Quaternion.identity;
         public Vector3 localScale = Vector3.one;

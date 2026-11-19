@@ -10,12 +10,24 @@ namespace DefaceGames.GridLevelDesign
         public GameObject prefab;
         public Vector2Int footprint = Vector2Int.one;
         public Vector3 pivotOffset;
+        public Vector3 scale = Vector3.one;
         public bool randomRotation;
         public List<GameObject> variants = new List<GameObject>();
 
         public Vector2Int GetFootprint()
         {
             return Vector2Int.Max(footprint, Vector2Int.one);
+        }
+
+        // Entries saved before the scale field existed load it as zero, which would hide the piece.
+        public Vector3 GetScale()
+        {
+            if(Mathf.Abs(scale.x) < 0.0001f || Mathf.Abs(scale.y) < 0.0001f || Mathf.Abs(scale.z) < 0.0001f)
+            {
+                return Vector3.one;
+            }
+
+            return scale;
         }
     }
 

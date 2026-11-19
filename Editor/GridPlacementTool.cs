@@ -94,10 +94,20 @@ namespace DefaceGames.GridLevelDesign.Editor
         private Vector3Int m_hoverCell;
         private float m_rotationDegrees;
         private float m_stepDegrees = 90f;
+        private float m_scaleMultiplier = 1f;
+        private float m_scaleStep = 0.1f;
         private bool m_stack;
         private bool m_stackKeyHeld;
         private bool m_eraseToggle;
         private bool m_eraseKeyHeld;
+        private bool m_snapToGrid = true;
+        private bool m_snapKeyHeld;
+        private float m_fineSnap;
+        private bool m_hasFreePoint;
+        private Vector3 m_freePoint;
+        private GameObject m_hoverPiece;
+        private Vector2 m_selectStartMouse;
+        private Vector2 m_selectEndMouse;
 
         private bool m_dragging;
         private bool m_erasing;
@@ -204,7 +214,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             {
                 UpdateHover(level, evt);
 
-                if(m_hasHoverCell)
+                if(m_hasHoverCell || m_mode == GridToolMode.Select || IsFreeform())
                 {
                     BeginStroke(level, evt, controlId);
                 }
@@ -215,6 +225,11 @@ namespace DefaceGames.GridLevelDesign.Editor
 
                 if(GUIUtility.hotControl == controlId)
                 {
+                    if(m_mode == GridToolMode.Select)
+                    {
+                        m_selectEndMouse = evt.mousePosition;
+                    }
+
                     ContinueStroke(level);
                     evt.Use();
                 }
@@ -239,9 +254,18 @@ namespace DefaceGames.GridLevelDesign.Editor
             {
                 m_eraseKeyHeld = false;
             }
+            else if(type == EventType.KeyUp && evt.keyCode == KeyCode.N)
+            {
+                m_snapKeyHeld = false;
+            }
             else if(type == EventType.Repaint && m_mode == GridToolMode.Select)
             {
                 DrawSelectMode(level);
+            }
+            else if(type == EventType.Repaint && IsFreeform())
+            {
+                DrawSelectionHighlights();
+                DrawFreeHover(level, m_dragging ? m_erasing : IsErasing(evt));
             }
             else if(type == EventType.Repaint)
             {
@@ -267,14 +291,274 @@ namespace DefaceGames.GridLevelDesign.Editor
             return m_eraseToggle || evt.shift;
         }
 
+        private bool IsFreeform()
+        {
+            return !m_snapToGrid && m_mode == GridToolMode.Paint;
+        }
+
         private void UpdateHover(GridLevel level, Event evt)
         {
             Ray ray = HandleUtility.GUIPointToWorldRay(evt.mousePosition);
             m_hasHoverCell = level.RaycastCell(ray, out m_hoverCell);
+            m_hoverPiece = null;
+            m_hasFreePoint = false;
+
+            if(m_mode == GridToolMode.Select || IsFreeform())
+            {
+                m_hoverPiece = PickPiece(level, evt.mousePosition);
+            }
+
+            if(IsFreeform())
+            {
+                m_hasFreePoint = FindFreePoint(level, ray, out m_freePoint);
+            }
+        }
+
+        private static GameObject GetPieceRoot(GridLevel level, GameObject picked)
+        {
+            GameObject current = picked;
+
+            while(current != null && current.transform.parent != level.transform)
+            {
+                if(current.transform.parent == null)
+                {
+                    return null;
+                }
+
+                current = current.transform.parent.gameObject;
+            }
+
+            if(current == null || level.FindByInstance(current) == null)
+            {
+                return null;
+            }
+
+            return current;
+        }
+
+        private static GameObject PickPiece(GridLevel level, Vector2 mousePosition)
+        {
+            return GetPieceRoot(level, HandleUtility.PickGameObject(mousePosition, false));
+        }
+
+        private static Vector3 NormalVector(GridLevel level)
+        {
+            Vector3 axis = Vector3.zero;
+            axis[level.normalAxis] = 1f;
+            return axis;
+        }
+
+        // With Stack on, the point lands on the nearest placed piece under the cursor (colliders first,
+        // render bounds for pieces without one); otherwise on the current layer's plane.
+        private bool FindFreePoint(GridLevel level, Ray ray, out Vector3 localPoint)
+        {
+            bool found = false;
+            float best = float.MaxValue;
+            Vector3 worldPoint = Vector3.zero;
+
+            if(m_stack)
+            {
+                Physics.SyncTransforms();
+                RaycastHit[] hits = Physics.RaycastAll(ray, 100000f, ~0, QueryTriggerInteraction.Ignore);
+
+                for(int i = 0; i < hits.Length; i++)
+                {
+                    if(hits[i].distance < best && hits[i].collider.transform.IsChildOf(level.transform))
+                    {
+                        best = hits[i].distance;
+                        worldPoint = hits[i].point;
+                        found = true;
+                    }
+                }
+
+                if(!found)
+                {
+                    for(int i = 0; i < level.cells.Count; i++)
+                    {
+                        if(level.cells[i].instance == null)
+                        {
+                            continue;
+                        }
+
+                        Renderer[] renderers = level.cells[i].instance.GetComponentsInChildren<Renderer>();
+
+                        for(int r = 0; r < renderers.Length; r++)
+                        {
+                            float distance;
+
+                            if(renderers[r].bounds.IntersectRay(ray, out distance) && distance < best)
+                            {
+                                best = distance;
+                                worldPoint = ray.GetPoint(distance);
+                                found = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if(found)
+            {
+                localPoint = level.transform.InverseTransformPoint(worldPoint);
+            }
+            else if(!level.RaycastPlane(ray, out localPoint))
+            {
+                return false;
+            }
+
+            if(m_fineSnap > 0f)
+            {
+                int u = level.uAxis;
+                int v = level.vAxis;
+                localPoint[u] = Mathf.Round(localPoint[u] / m_fineSnap) * m_fineSnap;
+                localPoint[v] = Mathf.Round(localPoint[v] / m_fineSnap) * m_fineSnap;
+            }
+
+            return true;
+        }
+
+        // With Stack off, a freeform piece may not overlap anything already placed (touching is allowed).
+        private bool IsFreeBlocked(GridLevel level, PaletteEntry entry)
+        {
+            if(m_stack || !m_hasFreePoint)
+            {
+                return false;
+            }
+
+            EnsureRolled(entry);
+
+            if(m_nextPrefab == null)
+            {
+                return false;
+            }
+
+            if(m_ghostPrefab != m_nextPrefab)
+            {
+                RebuildGhostCache(m_nextPrefab);
+            }
+
+            Quaternion localRotation = Quaternion.AngleAxis(GetEffectiveDegrees(), NormalVector(level));
+            Transform prefabRoot = m_nextPrefab.transform;
+            Matrix4x4 rootMatrix = level.transform.localToWorldMatrix * Matrix4x4.TRS(m_freePoint + localRotation * entry.pivotOffset, localRotation * prefabRoot.localRotation, GetPlacementScale(entry, m_nextPrefab));
+
+            Bounds ghost = new Bounds();
+            bool hasGhost = false;
+
+            for(int i = 0; i < m_ghostMeshes.Count; i++)
+            {
+                Matrix4x4 matrix = rootMatrix * m_ghostMatrices[i];
+                Bounds meshBounds = m_ghostMeshes[i].bounds;
+
+                for(int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 sign = new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f);
+                    Vector3 point = matrix.MultiplyPoint3x4(meshBounds.center + Vector3.Scale(meshBounds.extents, sign));
+
+                    if(hasGhost)
+                    {
+                        ghost.Encapsulate(point);
+                    }
+                    else
+                    {
+                        ghost = new Bounds(point, Vector3.zero);
+                        hasGhost = true;
+                    }
+                }
+            }
+
+            if(!hasGhost)
+            {
+                return false;
+            }
+
+            ghost = ShrinkBounds(ghost);
+
+            for(int i = 0; i < level.cells.Count; i++)
+            {
+                GameObject instance = level.cells[i].instance;
+                Bounds bounds;
+
+                if(instance == null || !TryGetBounds(instance, out bounds))
+                {
+                    continue;
+                }
+
+                if(ShrinkBounds(bounds).Intersects(ghost))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static Bounds ShrinkBounds(Bounds bounds)
+        {
+            Vector3 size = bounds.size;
+            size.x = Mathf.Max(0f, size.x - 0.02f);
+            size.y = Mathf.Max(0f, size.y - 0.02f);
+            size.z = Mathf.Max(0f, size.z - 0.02f);
+            bounds.size = size;
+            return bounds;
+        }
+
+        private void PlaceFree(GridLevel level, PaletteEntry entry)
+        {
+            EnsureRolled(entry);
+
+            float degrees = GetEffectiveDegrees();
+            Quaternion localRotation = Quaternion.AngleAxis(degrees, NormalVector(level));
+            GameObject prefab = m_nextPrefab;
+            GameObject instance = PrefabUtility.InstantiatePrefab(prefab, level.transform) as GameObject;
+
+            if(instance == null)
+            {
+                return;
+            }
+
+            instance.transform.localPosition = m_freePoint + localRotation * entry.pivotOffset;
+            instance.transform.localRotation = localRotation * prefab.transform.localRotation;
+            instance.transform.localScale = GetPlacementScale(entry, prefab);
+            Undo.RegisterCreatedObjectUndo(instance, "Grid Place Free");
+
+            PlacedCell placed = new PlacedCell();
+            placed.cell = Vector3Int.FloorToInt(new Vector3(m_freePoint.x / level.cellSize.x, m_freePoint.y / level.cellSize.y, m_freePoint.z / level.cellSize.z));
+            placed.size = Vector3Int.one;
+            placed.instance = instance;
+            placed.prefab = entry.prefab;
+            placed.rotation = degrees;
+            placed.rotationSteps = GridLevel.QuarterTurns(degrees);
+            placed.freeform = true;
+
+            Undo.RecordObject(level, "Grid Place Free");
+            level.AddCell(placed);
+            EditorUtility.SetDirty(level);
+            Roll(entry);
+        }
+
+        private void EraseObject(GridLevel level, GameObject instance)
+        {
+            PlacedCell piece = level.FindByInstance(instance);
+
+            if(piece == null)
+            {
+                return;
+            }
+
+            Undo.RecordObject(level, "Grid Erase");
+            level.RemovePiece(piece);
+            Undo.DestroyObjectImmediate(instance);
+            m_hoverPiece = null;
+            EditorUtility.SetDirty(level);
         }
 
         private void EnsureRolled(PaletteEntry entry)
         {
+            if(entry != m_rolledEntry)
+            {
+                m_scaleMultiplier = 1f;
+            }
+
             if(entry != m_rolledEntry || m_nextPrefab == null)
             {
                 Roll(entry);
@@ -347,6 +631,81 @@ namespace DefaceGames.GridLevelDesign.Editor
             return Mathf.Repeat(m_rotationDegrees + m_nextRandomSteps * 90f, 360f);
         }
 
+        private Vector3 GetPlacementScale(PaletteEntry entry, GameObject prefab)
+        {
+            Vector3 entryScale = Vector3.one;
+
+            if(entry != null)
+            {
+                entryScale = entry.GetScale();
+            }
+
+            return Vector3.Scale(prefab.transform.localScale, entryScale) * m_scaleMultiplier;
+        }
+
+        private static string FormatScale(float factor)
+        {
+            return factor.ToString("0.##") + "x";
+        }
+
+        private static float GetEntryFactor(PaletteEntry entry)
+        {
+            if(entry == null)
+            {
+                return 1f;
+            }
+
+            Vector3 scale = entry.GetScale();
+            return Mathf.Max(0.0001f, (Mathf.Abs(scale.x) + Mathf.Abs(scale.y) + Mathf.Abs(scale.z)) / 3f);
+        }
+
+        private float GetDisplayedScale()
+        {
+            return GetEntryFactor(GridPaletteState.selectedEntry) * m_scaleMultiplier;
+        }
+
+        private void ScaleBy(GridLevel level, float delta)
+        {
+            if(m_mode == GridToolMode.Select && m_selected.Count > 0)
+            {
+                ScaleSelected(level, delta);
+            }
+            else
+            {
+                float entryFactor = GetEntryFactor(GridPaletteState.selectedEntry);
+                float displayed = Mathf.Max(0.05f, entryFactor * m_scaleMultiplier + delta);
+                m_scaleMultiplier = displayed / entryFactor;
+            }
+        }
+
+        // Scales each selected piece around its own pivot, keeping its proportions; the step is added to
+        // its current size factor relative to its source prefab.
+        private void ScaleSelected(GridLevel level, float delta)
+        {
+            Undo.IncrementCurrentGroup();
+            Undo.SetCurrentGroupName("Grid Scale Selection");
+            int group = Undo.GetCurrentGroup();
+
+            foreach(GameObject instance in m_selected)
+            {
+                if(instance == null)
+                {
+                    continue;
+                }
+
+                GameObject source = PrefabUtility.GetCorrespondingObjectFromSource(instance);
+                Vector3 baseScale = source != null ? source.transform.localScale : Vector3.one;
+                float baseLength = Mathf.Max(0.0001f, baseScale.magnitude);
+                float factor = instance.transform.localScale.magnitude / baseLength;
+                float newFactor = Mathf.Max(0.05f, factor + delta);
+
+                Undo.RecordObject(instance.transform, "Grid Scale Selection");
+                instance.transform.localScale = instance.transform.localScale * (newFactor / Mathf.Max(0.0001f, factor));
+            }
+
+            Undo.CollapseUndoOperations(group);
+        }
+
         private void RotateBy(GridLevel level, float delta)
         {
             if(m_mode == GridToolMode.Select && m_selected.Count > 0)
@@ -381,8 +740,39 @@ namespace DefaceGames.GridLevelDesign.Editor
             if(m_mode == GridToolMode.Select)
             {
                 m_selectAdditive = evt.shift;
+                m_selectStartMouse = evt.mousePosition;
+                m_selectEndMouse = evt.mousePosition;
                 m_dragging = true;
                 GUIUtility.hotControl = controlId;
+                evt.Use();
+                return;
+            }
+
+            if(IsFreeform())
+            {
+                m_erasing = IsErasing(evt);
+                Undo.IncrementCurrentGroup();
+                Undo.SetCurrentGroupName(m_erasing ? "Grid Erase" : "Grid Place Free");
+                m_undoGroup = Undo.GetCurrentGroup();
+
+                if(m_erasing)
+                {
+                    EraseObject(level, m_hoverPiece);
+                    m_dragging = true;
+                    GUIUtility.hotControl = controlId;
+                }
+                else
+                {
+                    PaletteEntry entry = GridPaletteState.selectedEntry;
+
+                    if(entry != null && entry.prefab != null && m_hasFreePoint && !IsFreeBlocked(level, entry))
+                    {
+                        PlaceFree(level, entry);
+                    }
+
+                    Undo.CollapseUndoOperations(m_undoGroup);
+                }
+
                 evt.Use();
                 return;
             }
@@ -427,6 +817,12 @@ namespace DefaceGames.GridLevelDesign.Editor
 
         private void ContinueStroke(GridLevel level)
         {
+            if(m_dragging && m_erasing && IsFreeform())
+            {
+                EraseObject(level, m_hoverPiece);
+                return;
+            }
+
             if(!m_dragging || !m_hasHoverCell || m_hoverCell == m_endCell)
             {
                 return;
@@ -453,6 +849,12 @@ namespace DefaceGames.GridLevelDesign.Editor
             if(m_mode == GridToolMode.Select)
             {
                 ApplySelection(level);
+                return;
+            }
+
+            if(IsFreeform())
+            {
+                Undo.CollapseUndoOperations(m_undoGroup);
                 return;
             }
 
@@ -595,6 +997,7 @@ namespace DefaceGames.GridLevelDesign.Editor
 
             instance.transform.localPosition = localPosition;
             instance.transform.localRotation = localRotation * prefab.transform.localRotation;
+            instance.transform.localScale = GetPlacementScale(entry, prefab);
             Undo.RegisterCreatedObjectUndo(instance, "Grid Place");
 
             PlacedCell placed = new PlacedCell();
@@ -657,12 +1060,13 @@ namespace DefaceGames.GridLevelDesign.Editor
 
         private void PickUnderCursor(GridLevel level)
         {
-            if(!m_hasHoverCell)
+            PlacedCell piece = level.FindByInstance(PickPiece(level, Event.current.mousePosition));
+
+            if(piece == null && m_hasHoverCell)
             {
-                return;
+                piece = level.GetCell(m_hoverCell);
             }
 
-            PlacedCell piece = level.GetCell(m_hoverCell);
             PrefabPalette palette = GridPaletteState.palette;
 
             if(piece == null || piece.prefab == null || palette == null)
@@ -902,6 +1306,19 @@ namespace DefaceGames.GridLevelDesign.Editor
             {
                 PickUnderCursor(level);
             }
+            else if(evt.keyCode == KeyCode.N)
+            {
+                if(!m_snapKeyHeld)
+                {
+                    m_snapKeyHeld = true;
+                    m_snapToGrid = !m_snapToGrid;
+
+                    if(!m_snapToGrid)
+                    {
+                        m_mode = GridToolMode.Paint;
+                    }
+                }
+            }
             else if(evt.keyCode == KeyCode.RightBracket)
             {
                 Undo.RecordObject(level, "Grid Layer Up");
@@ -926,6 +1343,14 @@ namespace DefaceGames.GridLevelDesign.Editor
             else if(evt.keyCode == KeyCode.Period)
             {
                 RotateBy(level, m_stepDegrees);
+            }
+            else if(evt.keyCode == KeyCode.Equals || evt.keyCode == KeyCode.KeypadPlus)
+            {
+                ScaleBy(level, m_scaleStep);
+            }
+            else if(evt.keyCode == KeyCode.Minus || evt.keyCode == KeyCode.KeypadMinus)
+            {
+                ScaleBy(level, -m_scaleStep);
             }
             else if(evt.keyCode == KeyCode.Comma)
             {
@@ -1098,9 +1523,20 @@ namespace DefaceGames.GridLevelDesign.Editor
             Quaternion localRotation;
             level.GetRegionLocalPose(minCell, size, GetEffectiveDegrees(), entry.pivotOffset, out localPosition, out localRotation);
             localPosition.y += level.GetStackHeight(minCell, size);
+            DrawGhostPose(level, localPosition, localRotation, blocked);
+        }
+
+        private void DrawGhostPose(GridLevel level, Vector3 localPosition, Quaternion localRotation, bool blocked)
+        {
+            GameObject prefab = m_nextPrefab;
+
+            if(prefab == null || m_ghostMaterial == null)
+            {
+                return;
+            }
 
             Transform prefabRoot = prefab.transform;
-            Matrix4x4 rootMatrix = level.transform.localToWorldMatrix * Matrix4x4.TRS(localPosition, localRotation * prefabRoot.localRotation, prefabRoot.localScale);
+            Matrix4x4 rootMatrix = level.transform.localToWorldMatrix * Matrix4x4.TRS(localPosition, localRotation * prefabRoot.localRotation, GetPlacementScale(GridPaletteState.selectedEntry, prefab));
 
             m_ghostMaterial.SetColor("_Color", blocked ? m_ghostBlocked : m_ghostFree);
             m_ghostMaterial.SetPass(0);
@@ -1118,7 +1554,123 @@ namespace DefaceGames.GridLevelDesign.Editor
             DrawFacingArrow(level, localPosition, localRotation);
 
             Vector3 labelPosition = level.transform.TransformPoint(localPosition + Vector3.up * level.cellSize.y * 1.15f);
-            Handles.Label(labelPosition, FormatDegrees(GetEffectiveDegrees()), GetAngleLabelStyle());
+            string ghostLabel = FormatDegrees(GetEffectiveDegrees());
+
+            if(!Mathf.Approximately(GetDisplayedScale(), 1f))
+            {
+                ghostLabel += "   " + FormatScale(GetDisplayedScale());
+            }
+
+            Handles.Label(labelPosition, ghostLabel, GetAngleLabelStyle());
+        }
+
+        private void DrawFreeHover(GridLevel level, bool erasing)
+        {
+            if(erasing)
+            {
+                if(m_hoverPiece != null)
+                {
+                    DrawPieceBox(m_hoverPiece, m_blockedOutline);
+                }
+
+                return;
+            }
+
+            if(!m_hasFreePoint)
+            {
+                return;
+            }
+
+            PaletteEntry entry = GridPaletteState.selectedEntry;
+            bool hasEntry = entry != null && entry.prefab != null;
+            bool blocked = hasEntry && IsFreeBlocked(level, entry);
+
+            float discSize = Mathf.Min(level.cellSize[level.uAxis], level.cellSize[level.vAxis]) * 0.3f;
+            Matrix4x4 previousMatrix = Handles.matrix;
+            Color previousColor = Handles.color;
+            Handles.matrix = level.transform.localToWorldMatrix;
+            Handles.color = blocked ? m_blockedOutline : m_freeOutline;
+            Handles.DrawWireDisc(m_freePoint, NormalVector(level), discSize);
+            Handles.color = previousColor;
+            Handles.matrix = previousMatrix;
+
+            if(!hasEntry)
+            {
+                return;
+            }
+
+            EnsureRolled(entry);
+            float degrees = GetEffectiveDegrees();
+            Quaternion localRotation = Quaternion.AngleAxis(degrees, NormalVector(level));
+
+            if(m_ghostPrefab != m_nextPrefab)
+            {
+                RebuildGhostCache(m_nextPrefab);
+            }
+
+            EnsureGhostMaterial();
+            DrawGhostPose(level, m_freePoint + localRotation * entry.pivotOffset, localRotation, blocked);
+        }
+
+        private void EnsureGhostMaterial()
+        {
+            if(m_ghostMaterial != null)
+            {
+                return;
+            }
+
+            Shader shader = Shader.Find("Hidden/Internal-Colored");
+
+            if(shader == null)
+            {
+                return;
+            }
+
+            m_ghostMaterial = new Material(shader);
+            m_ghostMaterial.hideFlags = HideFlags.HideAndDontSave;
+            m_ghostMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            m_ghostMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            m_ghostMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Back);
+            m_ghostMaterial.SetInt("_ZWrite", 0);
+            m_ghostMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
+        }
+
+        private static bool TryGetBounds(GameObject instance, out Bounds bounds)
+        {
+            bounds = new Bounds(instance.transform.position, Vector3.zero);
+            Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
+
+            if(renderers.Length == 0)
+            {
+                return false;
+            }
+
+            bounds = renderers[0].bounds;
+
+            for(int i = 1; i < renderers.Length; i++)
+            {
+                bounds.Encapsulate(renderers[i].bounds);
+            }
+
+            return true;
+        }
+
+        private void DrawPieceBox(GameObject instance, Color color)
+        {
+            Bounds bounds;
+
+            if(!TryGetBounds(instance, out bounds))
+            {
+                return;
+            }
+
+            Color previousColor = Handles.color;
+            UnityEngine.Rendering.CompareFunction previousZTest = Handles.zTest;
+            Handles.color = color;
+            Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
+            DrawThickBox(bounds.center, bounds.extents * 1.02f, 3f);
+            Handles.zTest = previousZTest;
+            Handles.color = previousColor;
         }
 
         private static GUIStyle GetAngleLabelStyle()
@@ -1240,6 +1792,35 @@ namespace DefaceGames.GridLevelDesign.Editor
             DrawToggle(ref m_eraseToggle, m_eraseToggle ? "Erase: ON (D)" : "Erase: OFF (D)", new Color(1f, 0.35f, 0.3f, 1f));
             GUILayout.EndHorizontal();
 
+            GUILayout.BeginHorizontal();
+            bool snapHasNoEffect = !m_snapToGrid && m_mode != GridToolMode.Paint;
+            bool wasSnapping = m_snapToGrid;
+            string snapLabel = m_snapToGrid ? "Snap to Grid: ON (N)" : "Snap to Grid: OFF (N)";
+
+            if(snapHasNoEffect)
+            {
+                snapLabel = "Snap to Grid: OFF (Paint only)";
+                GUI.enabled = false;
+            }
+
+            DrawToggle(ref m_snapToGrid, snapLabel, new Color(0.45f, 0.9f, 0.45f, 1f));
+            GUI.enabled = true;
+
+            if(wasSnapping && !m_snapToGrid)
+            {
+                m_mode = GridToolMode.Paint;
+            }
+
+            if(!m_snapToGrid)
+            {
+                float previousSnapLabelWidth = EditorGUIUtility.labelWidth;
+                EditorGUIUtility.labelWidth = 60f;
+                m_fineSnap = Mathf.Max(0f, EditorGUILayout.FloatField(new GUIContent("Fine snap", "0 = fully free; otherwise rounds the position to this increment"), m_fineSnap, GUILayout.Width(120f)));
+                EditorGUIUtility.labelWidth = previousSnapLabelWidth;
+            }
+
+            GUILayout.EndHorizontal();
+
             GUILayout.Space(4f);
             GUILayout.BeginHorizontal();
 
@@ -1268,6 +1849,42 @@ namespace DefaceGames.GridLevelDesign.Editor
             EditorGUIUtility.labelWidth = 70f;
             m_stepDegrees = Mathf.Clamp(EditorGUILayout.FloatField("Step (deg)", m_stepDegrees), 0.1f, 360f);
             EditorGUIUtility.labelWidth = previousLabelWidth;
+
+            GUILayout.Space(4f);
+            GUILayout.BeginHorizontal();
+
+            if(GUILayout.Button(new GUIContent("Scale Down", "Shrink by step (-)"), EditorStyles.miniButtonLeft))
+            {
+                ScaleBy(level, -m_scaleStep);
+            }
+
+            string scaleText = "Next " + FormatScale(GetDisplayedScale());
+
+            if(selectMode && m_selected.Count > 0)
+            {
+                scaleText = "Selection";
+            }
+
+            GUILayout.Label(scaleText, EditorStyles.miniButtonMid, GUILayout.Width(80f));
+
+            if(GUILayout.Button(new GUIContent("Scale Up", "Grow by step (=)"), EditorStyles.miniButtonRight))
+            {
+                ScaleBy(level, m_scaleStep);
+            }
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            EditorGUIUtility.labelWidth = 70f;
+            m_scaleStep = Mathf.Clamp(EditorGUILayout.FloatField("Step (x)", m_scaleStep), 0.01f, 10f);
+            EditorGUIUtility.labelWidth = previousLabelWidth;
+
+            if(GUILayout.Button(new GUIContent("Reset", "Return to the selected prefab's own scale"), EditorStyles.miniButton, GUILayout.Width(50f)))
+            {
+                m_scaleMultiplier = 1f;
+            }
+
+            GUILayout.EndHorizontal();
 
             if(selectMode)
             {
@@ -1338,14 +1955,15 @@ namespace DefaceGames.GridLevelDesign.Editor
             if(selectMode)
             {
                 DrawShortcutHeader("Selecting");
-                DrawShortcutRow("Click", "Select the top piece in a cell");
-                DrawShortcutRow("Drag", "Box select everything in the area");
+                DrawShortcutRow("Click", "Select the piece under the cursor");
+                DrawShortcutRow("Drag", "Box select pieces on screen");
                 DrawShortcutRow("Shift + Click", "Add or remove from selection");
                 DrawShortcutRow("Esc", "Clear selection");
 
                 DrawShortcutHeader("Editing selection");
                 DrawShortcutRow(",", "Rotate selection left by step");
                 DrawShortcutRow(".", "Rotate selection right by step");
+                DrawShortcutRow("- / =", "Scale selection down / up");
                 DrawShortcutRow("Del", "Delete selected pieces");
             }
             else
@@ -1355,12 +1973,15 @@ namespace DefaceGames.GridLevelDesign.Editor
                 DrawShortcutRow("Shift + Drag", "Erase while held");
                 DrawShortcutRow("D", "Toggle erase mode");
                 DrawShortcutRow("S", "Toggle stacking on top");
+                DrawShortcutRow("N", "Toggle snap to grid (freeform)");
                 DrawShortcutRow("I", "Pick prefab under cursor");
                 DrawShortcutRow("Esc", "Cancel current drag");
 
-                DrawShortcutHeader("Rotation");
+                DrawShortcutHeader("Rotation and scale");
                 DrawShortcutRow(",", "Rotate left by step");
                 DrawShortcutRow(".", "Rotate right by step");
+                DrawShortcutRow("-", "Scale down by step");
+                DrawShortcutRow("=", "Scale up by step");
             }
 
             DrawShortcutHeader("Camera");
@@ -1473,6 +2094,11 @@ namespace DefaceGames.GridLevelDesign.Editor
                     title = m_nextPrefab != null ? m_nextPrefab.name : entry.prefab.name;
                     Vector2Int footprint = entry.GetFootprint();
                     detail = footprint.x + " x " + footprint.y + "   " + FormatDegrees(GetEffectiveDegrees());
+
+                    if(!Mathf.Approximately(GetDisplayedScale(), 1f))
+                    {
+                        detail += "   " + FormatScale(GetDisplayedScale());
+                    }
                 }
             }
 
@@ -1486,11 +2112,28 @@ namespace DefaceGames.GridLevelDesign.Editor
             EnsurePreviewStyles();
             GUILayout.BeginHorizontal();
 
+            string placementTag = string.Empty;
+
+            if(m_mode != GridToolMode.Select)
+            {
+                placementTag = IsFreeform() ? " (FREEFORM)" : " (GRID)";
+            }
+
             GUILayout.BeginVertical();
-            GUILayout.Label(header.ToUpperInvariant() + ": " + title, m_previewTitleStyle);
+            GUILayout.Label(header.ToUpperInvariant() + placementTag + ": " + title, m_previewTitleStyle);
             GUILayout.Label(detail, m_previewTextStyle);
             GUILayout.Label("Plane " + level.plane + "   Layer " + level.layer, m_previewTextStyle);
-            GUILayout.Label("Cell " + cellText, m_previewTextStyle);
+
+            if(IsFreeform())
+            {
+                string positionText = m_hasFreePoint ? m_freePoint.x.ToString("0.##") + ", " + m_freePoint.y.ToString("0.##") + ", " + m_freePoint.z.ToString("0.##") : "-";
+                GUILayout.Label("Pos " + positionText, m_previewTextStyle);
+            }
+            else
+            {
+                GUILayout.Label("Cell " + cellText, m_previewTextStyle);
+            }
+
             GUILayout.EndVertical();
 
             GUILayout.FlexibleSpace();
@@ -1557,48 +2200,48 @@ namespace DefaceGames.GridLevelDesign.Editor
                 m_selected.Clear();
             }
 
-            if(m_startCell == m_endCell)
+            if((m_selectEndMouse - m_selectStartMouse).sqrMagnitude < 16f)
             {
-                PlacedCell piece = level.GetCell(m_startCell);
+                GameObject piece = PickPiece(level, m_selectStartMouse);
 
                 if(piece == null)
                 {
                     return;
                 }
 
-                if(m_selectAdditive && m_selected.Contains(piece.instance))
+                if(m_selectAdditive && m_selected.Contains(piece))
                 {
-                    m_selected.Remove(piece.instance);
+                    m_selected.Remove(piece);
                 }
                 else
                 {
-                    m_selected.Add(piece.instance);
+                    m_selected.Add(piece);
                 }
 
                 return;
             }
 
-            CollectRectangle(level, m_startCell, m_endCell, m_cellBuffer);
-            HashSet<Vector3Int> area = new HashSet<Vector3Int>(m_cellBuffer);
+            Rect area = Rect.MinMaxRect(
+                Mathf.Min(m_selectStartMouse.x, m_selectEndMouse.x),
+                Mathf.Min(m_selectStartMouse.y, m_selectEndMouse.y),
+                Mathf.Max(m_selectStartMouse.x, m_selectEndMouse.x),
+                Mathf.Max(m_selectStartMouse.y, m_selectEndMouse.y));
 
             for(int i = 0; i < level.cells.Count; i++)
             {
-                PlacedCell placed = level.cells[i];
+                GameObject instance = level.cells[i].instance;
 
-                if(placed.instance == null)
+                if(instance == null)
                 {
                     continue;
                 }
 
-                GridLevel.GetCoveredCells(placed.cell, placed.coveredSize, m_coveredBuffer);
+                Bounds bounds;
+                TryGetBounds(instance, out bounds);
 
-                for(int c = 0; c < m_coveredBuffer.Count; c++)
+                if(area.Contains(HandleUtility.WorldToGUIPoint(bounds.center)))
                 {
-                    if(area.Contains(m_coveredBuffer[c]))
-                    {
-                        m_selected.Add(placed.instance);
-                        break;
-                    }
+                    m_selected.Add(instance);
                 }
             }
         }
@@ -1655,6 +2298,15 @@ namespace DefaceGames.GridLevelDesign.Editor
 
                 if(piece == null || instance == null)
                 {
+                    continue;
+                }
+
+                if(piece.freeform)
+                {
+                    Undo.RecordObject(instance.transform, "Grid Rotate Selection");
+                    instance.transform.localRotation = Quaternion.AngleAxis(delta, NormalVector(level)) * instance.transform.localRotation;
+                    piece.rotation = Mathf.Repeat(piece.rotationDegrees + delta, 360f);
+                    piece.rotationSteps = GridLevel.QuarterTurns(piece.rotation);
                     continue;
                 }
 
@@ -1720,26 +2372,25 @@ namespace DefaceGames.GridLevelDesign.Editor
 
             if(m_dragging)
             {
-                Vector3Int minCell = Vector3Int.Min(m_startCell, m_endCell);
-                Vector3Int maxCell = Vector3Int.Max(m_startCell, m_endCell);
-                DrawQuad(level, minCell, maxCell, m_selectFill, m_selectOutline);
+                Rect area = Rect.MinMaxRect(
+                    Mathf.Min(m_selectStartMouse.x, m_selectEndMouse.x),
+                    Mathf.Min(m_selectStartMouse.y, m_selectEndMouse.y),
+                    Mathf.Max(m_selectStartMouse.x, m_selectEndMouse.x),
+                    Mathf.Max(m_selectStartMouse.y, m_selectEndMouse.y));
+
+                Handles.BeginGUI();
+                EditorGUI.DrawRect(area, m_selectFill);
+                EditorGUI.DrawRect(new Rect(area.x, area.y, area.width, 1f), m_selectOutline);
+                EditorGUI.DrawRect(new Rect(area.x, area.yMax - 1f, area.width, 1f), m_selectOutline);
+                EditorGUI.DrawRect(new Rect(area.x, area.y, 1f, area.height), m_selectOutline);
+                EditorGUI.DrawRect(new Rect(area.xMax - 1f, area.y, 1f, area.height), m_selectOutline);
+                Handles.EndGUI();
                 return;
             }
 
-            if(!m_hasHoverCell)
+            if(m_hoverPiece != null && !m_selected.Contains(m_hoverPiece))
             {
-                return;
-            }
-
-            PlacedCell piece = level.GetCell(m_hoverCell);
-
-            if(piece != null)
-            {
-                DrawQuad(level, piece.cell, piece.cell + piece.coveredSize - Vector3Int.one, m_selectFill, m_selectOutline);
-            }
-            else
-            {
-                DrawQuad(level, m_hoverCell, m_hoverCell, m_freeFill, m_freeOutline);
+                DrawPieceBox(m_hoverPiece, new Color(m_selectOutline.r, m_selectOutline.g, m_selectOutline.b, 0.55f));
             }
         }
 

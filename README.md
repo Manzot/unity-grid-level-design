@@ -2,7 +2,7 @@
 
 An editor tool for Unity that lets you build levels by placing your own 3D prefabs on a grid, straight in the Scene view.
 
-Pick a prefab from a palette, see a ghost preview where it will land, and paint, drag rectangles, draw lines or flood fill. Pieces can stack on top of each other, span several cells, rotate by any angle and be selected later to rotate or delete. Levels can be saved to an asset or exported as JSON.
+Pick a prefab from a palette, see a ghost preview where it will land, and paint, drag rectangles, draw lines or flood fill. Turn grid snapping off to place pieces freely. Pieces can stack on top of each other, span several cells, rotate by any angle, be resized, and be selected later to rotate, scale or delete. Levels can be saved to an asset or exported as JSON.
 
 ![Demo room built with Grid Level Design](Documentation~/demo.png)
 
@@ -33,7 +33,7 @@ Clone or download this repository into your project's `Packages` folder.
 
 In Package Manager, select **Grid Level Design**, open **Samples** and import **Demo Scene and Test Prefabs**. It adds:
 
-- **Demo/GridLevelDemo** – the room in the screenshot above, built with the tool. Select **Grid Level**, activate the Grid Level Tool and keep building.
+- **Demo/GridLevelDemo** – the room in the screenshot above, built with the tool, including resized off-grid pieces. Select **Grid Level**, activate the Grid Level Tool and keep building.
 - **Demo/DemoPalette** – a palette with every test prefab; the crate entry has a variant and random rotation. Assign it in the palette window.
 - **Demo/DemoLevel** – the room saved as Level Data, linked to the scene's Grid Level for trying Save and Load.
 - **Prefabs** and **Materials** – simple blocks, walls, floors, planks and crates with 1x1, 2x1 and 2x2 footprints.
@@ -64,8 +64,10 @@ The sample materials use URP's Lit shader. In a Built-in or HDRP project they sh
 | Shift + Drag | Erase while held |
 | D | Toggle erase mode |
 | S | Toggle stacking on top of existing pieces |
+| N | Toggle snap to grid (off = freeform placement in Paint mode) |
 | I | Pick the prefab and rotation under the cursor |
 | , and . | Rotate left / right by the step angle (in Select mode, rotates the selection) |
+| - and = | Scale down / up by the scale step (in Select mode, scales the selection) |
 | [ and ] | Layer down / up |
 | G | Cycle plane XZ / XY / YZ |
 | Del | Delete selected pieces (Select mode) |
@@ -80,8 +82,10 @@ The **Shortcuts** button in the overlay shows the same list inside the editor.
 - **Stacking:** with Stack on, new pieces rest on top of existing ones, using real mesh height.
 - **Footprints:** each palette entry has a footprint in cells, calculated from its bounds when added and editable in the palette window.
 - **Rotation:** any step angle, default 90. Multi-cell footprints swap on quarter turns.
+- **Scale:** each palette entry has a Scale setting, and the overlay's scale tool resizes the next piece or the selection by an adjustable step.
+- **Freeform placement:** with Snap to Grid off, Paint places pieces exactly at the cursor, optionally rounded to a Fine snap increment. With Stack on they land on the surface under the cursor; with Stack off they can't overlap existing pieces.
 - **Variants:** each palette entry can list variant prefabs; every placement picks one at random. Optional random rotation.
-- **Selection:** click, box or Shift-add pieces, then rotate or delete them. Selected pieces are tinted and outlined.
+- **Selection:** click the piece under the cursor, box select on screen or Shift-add, then rotate, scale or delete. Selected pieces are tinted and outlined.
 - **Undo:** every stroke, fill, rotation, delete, load and clear is a single undo step.
 
 ## Saving and loading
@@ -105,6 +109,9 @@ Prefabs are placed with their pivot at the bottom centre of their footprint. If 
 - Removing a lower piece by hand does not drop the pieces stacked on it.
 - Rotating a selection does not check for overlap with neighbouring pieces.
 - At angles that aren't multiples of 90, multi-cell pieces can overhang neighbouring cells.
+- Grid and freeform pieces ignore each other: freeform pieces don't block grid cells, and grid erase and fill don't touch them.
+- The scale tool doesn't change a piece's grid footprint, so an enlarged grid piece can overlap its neighbours.
+- Freeform overlap checks use axis-aligned bounds, so rotated pieces count as slightly larger than they look.
 
 ## License
 

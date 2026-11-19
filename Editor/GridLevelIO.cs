@@ -17,6 +17,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             public Vector3 cell;
             public Vector3 size;
             public float rotation;
+            public bool freeform;
             public Vector3 position;
             public Quaternion localRotation;
             public Vector3 scale;
@@ -65,6 +66,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 piece.cell = placed.cell;
                 piece.size = placed.coveredSize;
                 piece.rotation = placed.rotationDegrees;
+                piece.freeform = placed.freeform;
                 piece.localPosition = pieceTransform.localPosition;
                 piece.localRotation = pieceTransform.localRotation;
                 piece.localScale = pieceTransform.localScale;
@@ -159,6 +161,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 entry.cell = piece.cell;
                 entry.size = piece.size;
                 entry.rotation = piece.rotation;
+                entry.freeform = piece.freeform;
                 entry.position = piece.localPosition;
                 entry.localRotation = piece.localRotation;
                 entry.scale = piece.localScale;
@@ -217,6 +220,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 piece.cell = Vector3Int.RoundToInt(entry.cell);
                 piece.size = Vector3Int.RoundToInt(entry.size);
                 piece.rotation = entry.rotation;
+                piece.freeform = entry.freeform;
                 piece.localPosition = entry.position;
                 piece.localRotation = entry.localRotation;
                 piece.localScale = entry.scale;
@@ -339,6 +343,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 placed.prefab = piece.paletteKey != null ? piece.paletteKey : prefab;
                 placed.rotation = piece.rotation;
                 placed.rotationSteps = GridLevel.QuarterTurns(piece.rotation);
+                placed.freeform = piece.freeform;
                 level.AddCell(placed);
                 created++;
             }

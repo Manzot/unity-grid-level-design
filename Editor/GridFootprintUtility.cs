@@ -7,6 +7,11 @@ namespace DefaceGames.GridLevelDesign.Editor
     {
         public static Vector2Int Compute(GameObject prefab, Vector3 cellSize)
         {
+            return Compute(prefab, cellSize, Vector3.one);
+        }
+
+        public static Vector2Int Compute(GameObject prefab, Vector3 cellSize, Vector3 scale)
+        {
             if(prefab == null)
             {
                 return Vector2Int.one;
@@ -41,8 +46,8 @@ namespace DefaceGames.GridLevelDesign.Editor
                 return Vector2Int.one;
             }
 
-            int x = Mathf.Max(1, Mathf.CeilToInt(total.size.x / cellSize.x - 0.01f));
-            int y = Mathf.Max(1, Mathf.CeilToInt(total.size.z / cellSize.z - 0.01f));
+            int x = Mathf.Max(1, Mathf.CeilToInt(total.size.x * Mathf.Abs(scale.x) / cellSize.x - 0.01f));
+            int y = Mathf.Max(1, Mathf.CeilToInt(total.size.z * Mathf.Abs(scale.z) / cellSize.z - 0.01f));
             return new Vector2Int(x, y);
         }
 
