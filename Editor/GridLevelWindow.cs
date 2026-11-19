@@ -96,9 +96,38 @@ namespace DefaceGames.GridLevelDesign.Editor
 
             root.RegisterCallback<DragUpdatedEvent>(OnDragUpdated);
             root.RegisterCallback<DragPerformEvent>(OnDragPerform);
+
+            // Lets the Scene tool's shortcuts work while this window still has keyboard focus.
+            root.focusable = true;
+            root.RegisterCallback<KeyDownEvent>(evt => ForwardKey(evt.target as VisualElement, EventType.KeyDown, evt.keyCode, evt.modifiers));
+            root.RegisterCallback<KeyUpEvent>(evt => ForwardKey(evt.target as VisualElement, EventType.KeyUp, evt.keyCode, evt.modifiers));
             root.schedule.Execute(UpdatePendingPreviews).Every(200);
 
             Refresh();
+        }
+
+        private static void ForwardKey(VisualElement source, EventType type, KeyCode keyCode, EventModifiers modifiers)
+        {
+            GridPlacementTool tool = GridPlacementTool.activeTool;
+
+            if(tool == null || keyCode == KeyCode.None)
+            {
+                return;
+            }
+
+            for(VisualElement element = source; element != null; element = element.parent)
+            {
+                if(element.ClassListContains("unity-base-text-field"))
+                {
+                    return;
+                }
+            }
+
+            Event forwarded = new Event();
+            forwarded.type = type;
+            forwarded.keyCode = keyCode;
+            forwarded.modifiers = modifiers;
+            tool.HandlePanelKey(forwarded);
         }
 
         private void OnPaletteFieldChanged(ChangeEvent<Object> evt)
@@ -235,6 +264,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                     GridPaletteState.Select(index);
                 }
 
+                rootVisualElement.Focus();
                 evt.StopPropagation();
             });
 
@@ -263,8 +293,40 @@ namespace DefaceGames.GridLevelDesign.Editor
             field.Bind(serializedPalette);
             m_detailsContainer.Add(field);
 
+            PaletteEntry entry = palette.entries[index];
+            string footprintText;
+
+            if(entry.manualFootprint)
+            {
+                footprintText = "Footprint: " + entry.GetFootprint().x + " x " + entry.GetFootprint().y + " cells (manual)";
+            }
+            else
+            {
+                GridLevel currentLevel = GridFootprintUtility.FindLevel();
+                Vector3 entryScale = entry.GetScale();
+
+                if(entry.fitToCell && currentLevel != null)
+                {
+                    entryScale = Vector3.one * GridFootprintUtility.GetFitFactor(currentLevel, entry.prefab);
+                }
+
+                Vector2Int live = GridFootprintUtility.ComputeFor(currentLevel, entry.prefab, entryScale);
+                footprintText = "Footprint: " + live.x + " x " + live.y + " cells (automatic, from the current grid). Tick Manual Footprint to set it yourself.";
+
+                if(entry.fitToCell)
+                {
+                    footprintText += "\nFit to Cell is on: scaled " + entryScale.x.ToString("0.##") + "x to fill one cell; the Scale field is ignored.";
+                }
+            }
+
+            Label footprintLabel = new Label(footprintText);
+            footprintLabel.style.whiteSpace = WhiteSpace.Normal;
+            footprintLabel.style.marginTop = 2f;
+            footprintLabel.style.marginBottom = 2f;
+            m_detailsContainer.Add(footprintLabel);
+
             Button autoButton = new Button(() => AutoFootprint(index));
-            autoButton.text = "Auto Footprint From Bounds";
+            autoButton.text = "Fill Manual Footprint From Bounds";
             m_detailsContainer.Add(autoButton);
         }
 
@@ -278,7 +340,8 @@ namespace DefaceGames.GridLevelDesign.Editor
             }
 
             Undo.RecordObject(palette, "Auto Footprint");
-            palette.entries[index].footprint = GridFootprintUtility.Compute(palette.entries[index].prefab, GridFootprintUtility.FindCellSize(), palette.entries[index].GetScale());
+            palette.entries[index].footprint = GridFootprintUtility.ComputeFor(GridFootprintUtility.FindLevel(), palette.entries[index].prefab, palette.entries[index].GetScale());
+            palette.entries[index].manualFootprint = true;
             EditorUtility.SetDirty(palette);
             GridPaletteState.NotifyChanged();
         }

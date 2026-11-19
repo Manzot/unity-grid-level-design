@@ -58,6 +58,12 @@ namespace DefaceGames.GridLevelDesign.Editor
             }
         }
 
+        public static bool IsPanelElement(Focusable element)
+        {
+            IMGUIContainer container = element as IMGUIContainer;
+            return container != null && container.onGUIHandler != null && container.onGUIHandler.Target is GridToolOverlay;
+        }
+
         private void DrawGUI()
         {
             GridPlacementTool tool = GridPlacementTool.activeTool;
@@ -78,6 +84,15 @@ namespace DefaceGames.GridLevelDesign.Editor
             // Reserve room for the vertical scroll bar so content never forces a horizontal one.
             tool.DrawPanelGUI(Mathf.Max(200f, width - 18f));
             GUILayout.EndScrollView();
+
+            Event evt = Event.current;
+
+            bool typing = EditorGUIUtility.editingTextField && GUIUtility.keyboardControl != 0;
+
+            if((evt.type == EventType.KeyDown || evt.type == EventType.KeyUp) && !typing)
+            {
+                tool.HandlePanelKey(evt);
+            }
         }
     }
 }

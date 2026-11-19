@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace DefaceGames.GridLevelDesign
 {
@@ -45,13 +46,17 @@ namespace DefaceGames.GridLevelDesign
     }
 
     [DisallowMultipleComponent]
-    public class GridLevel : MonoBehaviour
+    public class GridLevel : MonoBehaviour, ISerializationCallbackReceiver
     {
         public Vector3 cellSize = Vector3.one;
         public GridPlane plane = GridPlane.XZ;
         public int layer;
-        public int halfExtent = 20;
+        public int gridSize = 40;
         public Color gridColor = new Color(1f, 1f, 1f, 0.35f);
+
+        // Grids saved before gridSize existed stored half the size, as cells from the centre to each edge.
+        [SerializeField, HideInInspector, FormerlySerializedAs("halfExtent")]
+        private int m_legacyHalfExtent;
 
         [HideInInspector]
         public List<PlacedCell> cells = new List<PlacedCell>();
@@ -390,10 +395,40 @@ namespace DefaceGames.GridLevelDesign
             return true;
         }
 
+        // The grid stays centred on the origin; an odd size puts its extra cell on the positive side.
+        public int gridMin
+        {
+            get
+            {
+                return -(gridSize / 2);
+            }
+        }
+
+        public int gridMax
+        {
+            get
+            {
+                return gridMin + gridSize;
+            }
+        }
+
+        public void OnBeforeSerialize()
+        {
+        }
+
+        public void OnAfterDeserialize()
+        {
+            if(m_legacyHalfExtent > 0)
+            {
+                gridSize = m_legacyHalfExtent * 2;
+                m_legacyHalfExtent = 0;
+            }
+        }
+
         private void OnValidate()
         {
             cellSize = Vector3.Max(cellSize, Vector3.one * 0.01f);
-            halfExtent = Mathf.Max(1, halfExtent);
+            gridSize = Mathf.Max(1, gridSize);
             InvalidateLookup();
         }
     }

@@ -7,15 +7,52 @@ namespace DefaceGames.GridLevelDesign.Editor
     {
         private static Vector3[] m_linePoints = new Vector3[0];
         private static readonly Vector3[] m_axisPoints = new Vector3[4];
+        private static int m_levelCount = -1;
+
+        [InitializeOnLoadMethod]
+        private static void WatchHierarchy()
+        {
+            EditorApplication.hierarchyChanged += ResetLevelCount;
+        }
+
+        private static void ResetLevelCount()
+        {
+            m_levelCount = -1;
+        }
+
+        // A scene with several grids only shows the one being worked on: the selected grid, or the grid
+        // that owns the selected piece. A lone grid is always shown.
+        private static bool ShouldDraw(GridLevel level)
+        {
+            Transform active = Selection.activeTransform;
+
+            if(Selection.Contains(level.gameObject) || (active != null && active.IsChildOf(level.transform)))
+            {
+                return true;
+            }
+
+            if(m_levelCount < 0)
+            {
+                m_levelCount = Object.FindObjectsByType<GridLevel>(FindObjectsInactive.Exclude).Length;
+            }
+
+            return m_levelCount <= 1;
+        }
 
         [DrawGizmo(GizmoType.Selected | GizmoType.NonSelected)]
         private static void DrawGrid(GridLevel level, GizmoType gizmoType)
         {
+            if(!ShouldDraw(level))
+            {
+                return;
+            }
+
             int n = level.normalAxis;
             int u = level.uAxis;
             int v = level.vAxis;
-            int half = level.halfExtent;
-            int lineCount = (half * 2 + 1) * 2;
+            int min = level.gridMin;
+            int max = level.gridMax;
+            int lineCount = (level.gridSize + 1) * 2;
 
             if(m_linePoints.Length != lineCount * 2)
             {
@@ -25,21 +62,23 @@ namespace DefaceGames.GridLevelDesign.Editor
             float offset = level.layerOffset;
             float uSize = level.cellSize[u];
             float vSize = level.cellSize[v];
-            float uMax = half * uSize;
-            float vMax = half * vSize;
+            float uMin = min * uSize;
+            float vMin = min * vSize;
+            float uMax = max * uSize;
+            float vMax = max * vSize;
             int index = 0;
 
-            for(int i = -half; i <= half; i++)
+            for(int i = min; i <= max; i++)
             {
-                m_linePoints[index++] = MakePoint(n, u, v, offset, i * uSize, -vMax);
+                m_linePoints[index++] = MakePoint(n, u, v, offset, i * uSize, vMin);
                 m_linePoints[index++] = MakePoint(n, u, v, offset, i * uSize, vMax);
-                m_linePoints[index++] = MakePoint(n, u, v, offset, -uMax, i * vSize);
+                m_linePoints[index++] = MakePoint(n, u, v, offset, uMin, i * vSize);
                 m_linePoints[index++] = MakePoint(n, u, v, offset, uMax, i * vSize);
             }
 
-            m_axisPoints[0] = MakePoint(n, u, v, offset, 0f, -vMax);
+            m_axisPoints[0] = MakePoint(n, u, v, offset, 0f, vMin);
             m_axisPoints[1] = MakePoint(n, u, v, offset, 0f, vMax);
-            m_axisPoints[2] = MakePoint(n, u, v, offset, -uMax, 0f);
+            m_axisPoints[2] = MakePoint(n, u, v, offset, uMin, 0f);
             m_axisPoints[3] = MakePoint(n, u, v, offset, uMax, 0f);
 
             Matrix4x4 previousMatrix = Gizmos.matrix;

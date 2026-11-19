@@ -10845,7 +10845,7 @@ MonoBehaviour:
   cellSize: {x: 1, y: 1, z: 1}
   plane: 0
   layer: 0
-  halfExtent: 20
+  gridSize: 40
   gridColor: {r: 1, g: 1, b: 1, a: 0.35}
   cells:
   - cell: {x: -6, y: 0, z: -6}

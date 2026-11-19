@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace DefaceGames.GridLevelDesign
 {
@@ -20,11 +21,27 @@ namespace DefaceGames.GridLevelDesign
     }
 
     [CreateAssetMenu(fileName = "GridLevelData", menuName = "Grid Level/Level Data")]
-    public class GridLevelData : ScriptableObject
+    public class GridLevelData : ScriptableObject, ISerializationCallbackReceiver
     {
         public Vector3 cellSize = Vector3.one;
         public GridPlane plane = GridPlane.XZ;
-        public int halfExtent = 20;
+        public int gridSize = 40;
         public List<LevelPieceData> pieces = new List<LevelPieceData>();
+
+        [SerializeField, HideInInspector, FormerlySerializedAs("halfExtent")]
+        private int m_legacyHalfExtent;
+
+        public void OnBeforeSerialize()
+        {
+        }
+
+        public void OnAfterDeserialize()
+        {
+            if(m_legacyHalfExtent > 0)
+            {
+                gridSize = m_legacyHalfExtent * 2;
+                m_legacyHalfExtent = 0;
+            }
+        }
     }
 }

@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: DefaceGames.GridLevelDesign::DefaceGames.GridLevelDesign.GridLevelData
   cellSize: {x: 1, y: 1, z: 1}
   plane: 0
-  halfExtent: 20
+  gridSize: 40
   pieces:
   - prefab: {fileID: 1183488484039581170, guid: 43d99c2e0292c44ac96cf970fadd317c, type: 3}
     paletteKey: {fileID: 1183488484039581170, guid: 43d99c2e0292c44ac96cf970fadd317c, type: 3}

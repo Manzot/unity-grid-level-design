@@ -8,9 +8,11 @@ namespace DefaceGames.GridLevelDesign
     public class PaletteEntry
     {
         public GameObject prefab;
+        public bool manualFootprint;
         public Vector2Int footprint = Vector2Int.one;
         public Vector3 pivotOffset;
         public Vector3 scale = Vector3.one;
+        public bool fitToCell;
         public bool randomRotation;
         public List<GameObject> variants = new List<GameObject>();
 

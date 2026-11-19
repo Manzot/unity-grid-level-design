@@ -67,23 +67,27 @@ The sample materials use URP's Lit shader. In a Built-in or HDRP project they sh
 | N | Toggle snap to grid (off = freeform placement in Paint mode) |
 | I | Pick the prefab and rotation under the cursor |
 | , and . | Rotate left / right by the step angle (in Select mode, rotates the selection) |
+| / | Cycle the rotation axis X / Y / Z |
 | - and = | Scale down / up by the scale step (in Select mode, scales the selection) |
 | [ and ] | Layer down / up |
 | G | Cycle plane XZ / XY / YZ |
 | Del | Delete selected pieces (Select mode) |
 | Esc | Cancel a drag, or clear the selection |
+| F | Focus the selection, or the last piece placed, picked or selected |
+| Shift + F | Frame the whole grid |
 
 The **Shortcuts** button in the overlay shows the same list inside the editor.
 
 ## Features
 
-- **Grid:** XZ, XY or YZ plane, per-axis cell size, layers step by one cell along the plane's normal.
+- **Grid:** XZ, XY or YZ plane, per-axis cell size, Grid Size in cells across, layers step by one cell along the plane's normal. With several grids in a scene, only the selected one is drawn.
 - **Ghost preview:** a translucent copy of the next piece, drawn on top of whatever is already in the cell, red when the spot is blocked, with a facing arrow and angle label.
 - **Stacking:** with Stack on, new pieces rest on top of existing ones, using real mesh height.
-- **Footprints:** each palette entry has a footprint in cells, calculated from its bounds when added and editable in the palette window.
-- **Rotation:** any step angle, default 90. Multi-cell footprints swap on quarter turns.
-- **Scale:** each palette entry has a Scale setting, and the overlay's scale tool resizes the next piece or the selection by an adjustable step.
-- **Freeform placement:** with Snap to Grid off, Paint places pieces exactly at the cursor, optionally rounded to a Fine snap increment. With Stack on they land on the surface under the cursor; with Stack off they can't overlap existing pieces.
+- **Footprints:** calculated automatically from each prefab's bounds for the current grid's plane and cell size. Tick Manual Footprint on a palette entry to set it yourself.
+- **Rotation:** any step angle, default 90, around X, Y or Z. Multi-cell footprints swap on quarter turns; tilted pieces are re-seated on the grid.
+- **Scale:** each palette entry has a Scale setting and an optional Fit to Cell, and the overlay's scale tool resizes the next piece or the selection by an adjustable step.
+- **Freeform placement:** with Snap to Grid off, Paint places pieces exactly at the cursor, optionally rounded to a Fine snap increment. With Stack on they land on top of whatever is under the cursor; with Stack off they stay at the layer's height.
+- **Snap points:** in freeform, the piece under the cursor shows dots on its top, sides and bottom. Move the cursor near a dot and the next piece's matching face attaches to it, centred.
 - **Variants:** each palette entry can list variant prefabs; every placement picks one at random. Optional random rotation.
 - **Selection:** click the piece under the cursor, box select on screen or Shift-add, then rotate, scale or delete. Selected pieces are tinted and outlined.
 - **Undo:** every stroke, fill, rotation, delete, load and clear is a single undo step.
@@ -111,7 +115,9 @@ Prefabs are placed with their pivot at the bottom centre of their footprint. If 
 - At angles that aren't multiples of 90, multi-cell pieces can overhang neighbouring cells.
 - Grid and freeform pieces ignore each other: freeform pieces don't block grid cells, and grid erase and fill don't touch them.
 - The scale tool doesn't change a piece's grid footprint, so an enlarged grid piece can overlap its neighbours.
-- Freeform overlap checks use axis-aligned bounds, so rotated pieces count as slightly larger than they look.
+- Freeform placement doesn't check for overlap: pieces can be placed through each other.
+- Freeform drop height and snap points use axis-aligned bounds and mesh vertices, so rounded or rotated pieces can land slightly off what you'd expect.
+- Snap points only work on XZ (floor) grids, and they move the next piece without turning it.
 
 ## License
 

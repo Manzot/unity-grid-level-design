@@ -29,8 +29,15 @@ namespace DefaceGames.GridLevelDesign.Editor
             public int version = 1;
             public Vector3 cellSize;
             public string plane;
-            public int halfExtent;
+            public int gridSize;
             public List<JsonPiece> pieces = new List<JsonPiece>();
+        }
+
+        // Files exported before gridSize existed stored half the size instead.
+        [Serializable]
+        private class LegacyJsonLevel
+        {
+            public int halfExtent;
         }
 
         public static List<LevelPieceData> Capture(GridLevel level)
@@ -81,7 +88,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             Undo.RecordObject(data, "Save Grid Level");
             data.cellSize = level.cellSize;
             data.plane = level.plane;
-            data.halfExtent = level.halfExtent;
+            data.gridSize = level.gridSize;
             data.pieces = Capture(level);
             EditorUtility.SetDirty(data);
             AssetDatabase.SaveAssetIfDirty(data);
@@ -119,7 +126,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 return;
             }
 
-            Apply(level, data.cellSize, data.plane, data.halfExtent, data.pieces, "Load Grid Level");
+            Apply(level, data.cellSize, data.plane, data.gridSize, data.pieces, "Load Grid Level");
         }
 
         public static void Clear(GridLevel level, bool ask)
@@ -149,7 +156,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             JsonLevel json = new JsonLevel();
             json.cellSize = level.cellSize;
             json.plane = level.plane.ToString();
-            json.halfExtent = level.halfExtent;
+            json.gridSize = level.gridSize;
 
             for(int i = 0; i < pieces.Count; i++)
             {
@@ -182,7 +189,8 @@ namespace DefaceGames.GridLevelDesign.Editor
                 return;
             }
 
-            JsonLevel json = JsonUtility.FromJson<JsonLevel>(File.ReadAllText(path));
+            string text = File.ReadAllText(path);
+            JsonLevel json = JsonUtility.FromJson<JsonLevel>(text);
 
             if(json == null || json.pieces == null)
             {
@@ -227,7 +235,14 @@ namespace DefaceGames.GridLevelDesign.Editor
                 pieces.Add(piece);
             }
 
-            Apply(level, json.cellSize, plane, json.halfExtent, pieces, "Import Grid Level");
+            int gridSize = json.gridSize;
+
+            if(gridSize <= 0)
+            {
+                gridSize = JsonUtility.FromJson<LegacyJsonLevel>(text).halfExtent * 2;
+            }
+
+            Apply(level, json.cellSize, plane, gridSize, pieces, "Import Grid Level");
         }
 
         private static GameObject LoadByGuid(string guid)
@@ -291,7 +306,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             EditorUtility.SetDirty(level);
         }
 
-        private static void Apply(GridLevel level, Vector3 cellSize, GridPlane plane, int halfExtent, List<LevelPieceData> pieces, string undoName)
+        private static void Apply(GridLevel level, Vector3 cellSize, GridPlane plane, int gridSize, List<LevelPieceData> pieces, string undoName)
         {
             Undo.IncrementCurrentGroup();
             Undo.SetCurrentGroupName(undoName);
@@ -302,7 +317,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             Undo.RecordObject(level, undoName);
             level.cellSize = Vector3.Max(cellSize, Vector3.one * 0.01f);
             level.plane = plane;
-            level.halfExtent = Mathf.Max(1, halfExtent);
+            level.gridSize = Mathf.Max(1, gridSize);
 
             List<string> missing = new List<string>();
             int created = 0;
