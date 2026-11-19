@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9181efdd78c664864825abf393186faf, type: 3}
+  m_Name: DemoPalette
+  m_EditorClassIdentifier: DefaceGames.GridLevelDesign::DefaceGames.GridLevelDesign.PrefabPalette
+  entries:
+  - prefab: {fileID: 1183488484039581170, guid: 43d99c2e0292c44ac96cf970fadd317c, type: 3}
+    footprint: {x: 1, y: 1}
+    pivotOffset: {x: 0, y: 0, z: 0}
+    randomRotation: 0
+    variants: []
+  - prefab: {fileID: 5840483311537824316, guid: 571c1118809f242d2a12c96e3c52bb6a, type: 3}
+    footprint: {x: 1, y: 1}
+    pivotOffset: {x: 0, y: 0, z: 0}
+    randomRotation: 0
+    variants: []
+  - prefab: {fileID: 3825935423617412672, guid: b9b2197570fed456790e82a17e2d720e, type: 3}
+    footprint: {x: 1, y: 1}
+    pivotOffset: {x: 0, y: 0, z: 0}
+    randomRotation: 0
+    variants: []
+  - prefab: {fileID: 4457257626300313964, guid: 42aab844a0673428fa82c3e742124f31, type: 3}
+    footprint: {x: 1, y: 1}
+    pivotOffset: {x: 0, y: 0, z: 0}
+    randomRotation: 0
+    variants: []
+  - prefab: {fileID: 7430426311576982584, guid: 6c0b355a7fd67494791020b55f8b3097, type: 3}
+    footprint: {x: 1, y: 1}
+    pivotOffset: {x: 0, y: 0, z: 0}
+    randomRotation: 0
+    variants: []
+  - prefab: {fileID: 7060688465003989516, guid: 78c9ff05880364678a2c53e963931ff7, type: 3}
+    footprint: {x: 2, y: 2}
+    pivotOffset: {x: 0, y: 0, z: 0}
+    randomRotation: 0
+    variants: []
+  - prefab: {fileID: 1859663033870314110, guid: 9b0a08751299d4f46ab68629b8617c60, type: 3}
+    footprint: {x: 2, y: 1}
+    pivotOffset: {x: 0, y: 0, z: 0}
+    randomRotation: 0
+    variants: []
+  - prefab: {fileID: 7088114009294656531, guid: 4f895c822cfef4418994afc8dee5dadb, type: 3}
+    footprint: {x: 1, y: 1}
+    pivotOffset: {x: 0, y: 0, z: 0}
+    randomRotation: 1
+    variants:
+    - {fileID: 1754993139153849822, guid: 665a8f76f9b304ab1be8af70e3e297f4, type: 3}

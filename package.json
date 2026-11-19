@@ -1,0 +1,33 @@
+{
+  "name": "com.defacegames.gridlevel",
+  "version": "0.1.0",
+  "displayName": "Grid Level Design",
+  "description": "Editor tool for building levels by placing 3D prefabs on an XZ, XY or YZ grid. Includes a prefab palette, ghost preview, paint/rectangle/line/fill tools, stacking, multi-cell footprints, random variants, selection with rotate and delete, and save/load to assets or JSON.",
+  "unity": "6000.0",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/Manzot/unity-grid-level-design#readme",
+  "changelogUrl": "https://github.com/Manzot/unity-grid-level-design/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/Manzot/unity-grid-level-design/blob/main/LICENSE.md",
+  "keywords": [
+    "level design",
+    "grid",
+    "tile",
+    "prefab",
+    "editor tool",
+    "level editor"
+  ],
+  "author": {
+    "name": "Deface Games"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Manzot/unity-grid-level-design.git"
+  },
+  "samples": [
+    {
+      "displayName": "Demo Scene and Test Prefabs",
+      "description": "A small demo room built with the tool (stacking, 2x1 and 2x2 pieces, rotations, crate variants), its palette and saved Level Data, plus the simple test prefabs it uses.",
+      "path": "Samples~/TestPrefabs"
+    }
+  ]
+}

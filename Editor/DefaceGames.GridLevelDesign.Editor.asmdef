@@ -1,0 +1,12 @@
+{
+  "name": "DefaceGames.GridLevelDesign.Editor",
+  "rootNamespace": "DefaceGames.GridLevelDesign.Editor",
+  "references": [
+    "DefaceGames.GridLevelDesign"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "autoReferenced": true
+}
