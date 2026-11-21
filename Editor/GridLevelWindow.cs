@@ -10,6 +10,8 @@ namespace DefaceGames.GridLevelDesign.Editor
     {
         private const float m_tileSize = 76f;
         private const int m_maxPreviewTries = 50;
+        private const int m_visibleTileRows = 3;
+        private const float m_tileRowHeight = 94f;
 
         private static readonly Color m_selectedColor = new Color(0.2f, 0.8f, 1f, 1f);
         private static readonly Color m_tileColor = new Color(1f, 1f, 1f, 0.06f);
@@ -77,7 +79,9 @@ namespace DefaceGames.GridLevelDesign.Editor
             root.Add(header);
 
             ScrollView scroll = new ScrollView(ScrollViewMode.Vertical);
-            scroll.style.flexGrow = 1f;
+            scroll.style.flexGrow = 0f;
+            scroll.style.flexShrink = 1f;
+            scroll.style.maxHeight = m_visibleTileRows * m_tileRowHeight + 4f;
 
             m_tileContainer = new VisualElement();
             m_tileContainer.style.flexDirection = FlexDirection.Row;
@@ -85,9 +89,15 @@ namespace DefaceGames.GridLevelDesign.Editor
             scroll.Add(m_tileContainer);
             root.Add(scroll);
 
+            ScrollView detailsScroll = new ScrollView(ScrollViewMode.Vertical);
+            detailsScroll.style.flexGrow = 1f;
+            detailsScroll.style.flexShrink = 1f;
+            detailsScroll.style.minHeight = 60f;
+
             m_detailsContainer = new VisualElement();
             m_detailsContainer.style.marginTop = 4f;
-            root.Add(m_detailsContainer);
+            detailsScroll.Add(m_detailsContainer);
+            root.Add(detailsScroll);
 
             m_statusLabel = new Label();
             m_statusLabel.style.marginTop = 4f;
@@ -293,33 +303,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             field.Bind(serializedPalette);
             m_detailsContainer.Add(field);
 
-            PaletteEntry entry = palette.entries[index];
-            string footprintText;
-
-            if(entry.manualFootprint)
-            {
-                footprintText = "Footprint: " + entry.GetFootprint().x + " x " + entry.GetFootprint().y + " cells (manual)";
-            }
-            else
-            {
-                GridLevel currentLevel = GridFootprintUtility.FindLevel();
-                Vector3 entryScale = entry.GetScale();
-
-                if(entry.fitToCell && currentLevel != null)
-                {
-                    entryScale = Vector3.one * GridFootprintUtility.GetFitFactor(currentLevel, entry.prefab);
-                }
-
-                Vector2Int live = GridFootprintUtility.ComputeFor(currentLevel, entry.prefab, entryScale);
-                footprintText = "Footprint: " + live.x + " x " + live.y + " cells (automatic, from the current grid). Tick Manual Footprint to set it yourself.";
-
-                if(entry.fitToCell)
-                {
-                    footprintText += "\nFit to Cell is on: scaled " + entryScale.x.ToString("0.##") + "x to fill one cell; the Scale field is ignored.";
-                }
-            }
-
-            Label footprintLabel = new Label(footprintText);
+            Label footprintLabel = new Label(GridFootprintUtility.DescribeFootprint(palette.entries[index]));
             footprintLabel.style.whiteSpace = WhiteSpace.Normal;
             footprintLabel.style.marginTop = 2f;
             footprintLabel.style.marginBottom = 2f;
@@ -332,18 +316,7 @@ namespace DefaceGames.GridLevelDesign.Editor
 
         private void AutoFootprint(int index)
         {
-            PrefabPalette palette = GridPaletteState.palette;
-
-            if(palette == null || index < 0 || index >= palette.entries.Count)
-            {
-                return;
-            }
-
-            Undo.RecordObject(palette, "Auto Footprint");
-            palette.entries[index].footprint = GridFootprintUtility.ComputeFor(GridFootprintUtility.FindLevel(), palette.entries[index].prefab, palette.entries[index].GetScale());
-            palette.entries[index].manualFootprint = true;
-            EditorUtility.SetDirty(palette);
-            GridPaletteState.NotifyChanged();
+            GridFootprintUtility.FillManualFootprint(GridPaletteState.palette, index);
         }
 
         private static void SetBorder(VisualElement element, bool selected)

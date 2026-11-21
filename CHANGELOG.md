@@ -2,6 +2,23 @@
 
 All notable changes to this package are documented here.
 
+## [0.4.0] - 2026-11-21
+
+### Breaking
+- The erase toggle shortcut moved from D to X, so it no longer clashes with Unity's right-click fly mode.
+
+### Added
+- Palette section in the overlay: an expandable list of the palette's prefabs to pick from, with the palette asset field and an Open Window button.
+- Prefab Settings section in the overlay for the selected palette entry, including the footprint readout and Fill Manual Footprint From Bounds.
+- Random Position on palette entries: each grid placement is offset by a random amount from 0 to the set value on each grid axis. Not applied in freeform.
+
+### Changed
+- The palette window's prefab grid shows about three rows and scrolls, and the entry settings below it have their own scroll area, so they are no longer squeezed out by large palettes.
+- Rotating a selected grid piece keeps its whole offset within the cell, not just its height.
+
+### Fixed
+- Holding the right mouse button to fly with W A S D toggled Stack (S) and Erase (D). Tool shortcuts are now ignored while the right mouse button is held.
+
 ## [0.3.0] - 2026-11-19
 
 ### Breaking

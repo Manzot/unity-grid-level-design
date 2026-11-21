@@ -14,6 +14,7 @@ namespace DefaceGames.GridLevelDesign
         public Vector3 scale = Vector3.one;
         public bool fitToCell;
         public bool randomRotation;
+        public Vector3 randomPosition;
         public List<GameObject> variants = new List<GameObject>();
 
         public Vector2Int GetFootprint()

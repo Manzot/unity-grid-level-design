@@ -161,6 +161,8 @@ namespace DefaceGames.GridLevelDesign.Editor
         private PaletteEntry m_rolledEntry;
         private GameObject m_nextPrefab;
         private int m_nextRandomSteps;
+        private bool m_rightMouseHeld;
+        private Vector3 m_nextRandomOffset;
 
         public override void OnActivated()
         {
@@ -225,6 +227,15 @@ namespace DefaceGames.GridLevelDesign.Editor
             int controlId = GUIUtility.GetControlID(m_controlHash, FocusType.Passive);
             Event evt = Event.current;
             EventType type = evt.GetTypeForControl(controlId);
+
+            if(evt.rawType == EventType.MouseDown && evt.button == 1)
+            {
+                m_rightMouseHeld = true;
+            }
+            else if(evt.rawType == EventType.MouseUp && evt.button == 1)
+            {
+                m_rightMouseHeld = false;
+            }
 
             if((type == EventType.ValidateCommand || type == EventType.ExecuteCommand) && IsFrameCommand(evt))
             {
@@ -332,7 +343,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             {
                 m_stackKeyHeld = false;
             }
-            else if(evt.keyCode == KeyCode.D)
+            else if(evt.keyCode == KeyCode.X)
             {
                 m_eraseKeyHeld = false;
             }
@@ -984,6 +995,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             m_rolledEntry = entry;
             m_nextPrefab = null;
             m_nextRandomSteps = 0;
+            m_nextRandomOffset = Vector3.zero;
 
             if(entry == null || entry.prefab == null)
             {
@@ -1023,6 +1035,11 @@ namespace DefaceGames.GridLevelDesign.Editor
                         break;
                     }
                 }
+            }
+
+            if(entry.randomPosition != Vector3.zero)
+            {
+                m_nextRandomOffset = new Vector3(Random.Range(0f, entry.randomPosition.x), Random.Range(0f, entry.randomPosition.y), Random.Range(0f, entry.randomPosition.z));
             }
 
             if(entry.randomRotation)
@@ -1193,6 +1210,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 TryGetYaw(level, rotation, out yaw);
                 level.GetRegionLocalPose(minCell, size, yaw, entry.pivotOffset, out localPosition, out localRotation);
                 localPosition.y += stackHeight;
+                localPosition += m_nextRandomOffset;
                 return;
             }
 
@@ -1200,6 +1218,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             Vector3 center = Vector3.Scale((Vector3)minCell + (Vector3)size * 0.5f, level.cellSize);
             localRotation = rotation;
             localPosition = new Vector3(center.x - bounds.center.x, minCell.y * level.cellSize.y - bounds.min.y + stackHeight, center.z - bounds.center.z);
+            localPosition += m_nextRandomOffset;
         }
 
         private void GetFreePose(GridLevel level, PaletteEntry entry, out Vector3 localPosition, out Quaternion localRotation)
@@ -2037,9 +2056,19 @@ namespace DefaceGames.GridLevelDesign.Editor
             }
         }
 
+        private bool IsFlying()
+        {
+            if(m_rightMouseHeld && !Tools.viewToolActive && Event.current != null && Event.current.type == EventType.MouseMove)
+            {
+                m_rightMouseHeld = false;
+            }
+
+            return m_rightMouseHeld || (Tools.viewToolActive && Tools.viewTool == ViewTool.FPS);
+        }
+
         private void HandleKey(GridLevel level, Event evt)
         {
-            if(evt.control || evt.command)
+            if(evt.control || evt.command || IsFlying())
             {
                 return;
             }
@@ -2052,7 +2081,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                     m_stack = !m_stack;
                 }
             }
-            else if(evt.keyCode == KeyCode.D)
+            else if(evt.keyCode == KeyCode.X)
             {
                 if(!m_eraseKeyHeld)
                 {
@@ -2604,7 +2633,7 @@ namespace DefaceGames.GridLevelDesign.Editor
 
             GUILayout.BeginHorizontal();
             DrawToggle(ref m_stack, m_stack ? "Stack: ON (S)" : "Stack: OFF (S)", new Color(0.3f, 0.85f, 1f, 1f));
-            DrawToggle(ref m_eraseToggle, m_eraseToggle ? "Erase: ON (D)" : "Erase: OFF (D)", new Color(1f, 0.35f, 0.3f, 1f));
+            DrawToggle(ref m_eraseToggle, m_eraseToggle ? "Erase: ON (X)" : "Erase: OFF (X)", new Color(1f, 0.35f, 0.3f, 1f));
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
@@ -2746,6 +2775,7 @@ namespace DefaceGames.GridLevelDesign.Editor
 
             GUILayout.Space(4f);
             DrawInfoAndPreview(level);
+            DrawPaletteSection(Mathf.Max(m_panelWidth, availableWidth));
 
 
             GUILayout.EndVertical();
@@ -2753,6 +2783,234 @@ namespace DefaceGames.GridLevelDesign.Editor
             if(EditorGUI.EndChangeCheck())
             {
                 SceneView.RepaintAll();
+            }
+        }
+
+        private const string m_showPaletteKey = "DefaceGames.GridLevel.ShowPanelPalette";
+        private const float m_paletteTileSize = 64f;
+        private const float m_paletteTileSpacing = 3f;
+        private const float m_paletteLabelHeight = 14f;
+        private const int m_paletteVisibleRows = 3;
+
+        private static readonly Color m_paletteTileColor = new Color(1f, 1f, 1f, 0.06f);
+        private static readonly Color m_paletteSelectedColor = new Color(0.2f, 0.8f, 1f, 1f);
+
+        private static GUIStyle m_paletteLabelStyle;
+        private static bool m_previewCacheSized;
+        private Vector2 m_paletteScroll;
+        private const string m_showPrefabSettingsKey = "DefaceGames.GridLevel.ShowPanelPrefabSettings";
+        private SerializedObject m_paletteObject;
+
+        private void DrawPaletteSection(float width)
+        {
+            bool show = EditorPrefs.GetBool(m_showPaletteKey, false);
+
+            GUILayout.Space(4f);
+            GUILayout.BeginHorizontal();
+            bool newShow = GUILayout.Toggle(show, new GUIContent("Palette", "Show or hide the prefab palette"), EditorStyles.miniButton);
+
+            if(GUILayout.Button(new GUIContent("Open Window", "Open the palette window to add, remove or set up prefabs"), EditorStyles.miniButton, GUILayout.Width(90f)))
+            {
+                EditorApplication.ExecuteMenuItem("Window/Grid Level/Palette");
+            }
+
+            GUILayout.EndHorizontal();
+
+            if(newShow != show)
+            {
+                EditorPrefs.SetBool(m_showPaletteKey, newShow);
+            }
+
+            if(!newShow)
+            {
+                return;
+            }
+
+            if(!m_previewCacheSized)
+            {
+                m_previewCacheSized = true;
+                AssetPreview.SetPreviewTextureCacheSize(512);
+            }
+
+            PrefabPalette current = GridPaletteState.palette;
+            EditorGUI.BeginChangeCheck();
+            PrefabPalette picked = (PrefabPalette)EditorGUILayout.ObjectField(current, typeof(PrefabPalette), false);
+
+            if(EditorGUI.EndChangeCheck())
+            {
+                GridPaletteState.palette = picked;
+                current = picked;
+                m_paletteScroll = Vector2.zero;
+            }
+
+            if(current == null)
+            {
+                EditorGUILayout.HelpBox("Assign a palette, or create one in the palette window.", MessageType.None);
+                return;
+            }
+
+            int count = current.entries.Count;
+
+            if(count == 0)
+            {
+                EditorGUILayout.HelpBox("Empty palette. Add prefabs in the palette window.", MessageType.None);
+                return;
+            }
+
+            if(m_paletteLabelStyle == null)
+            {
+                m_paletteLabelStyle = new GUIStyle(EditorStyles.miniLabel);
+                m_paletteLabelStyle.alignment = TextAnchor.MiddleCenter;
+                m_paletteLabelStyle.clipping = TextClipping.Clip;
+                m_paletteLabelStyle.fontSize = 9;
+            }
+
+            float innerWidth = Mathf.Max(m_paletteTileSize, width - 16f);
+            float cellWidth = m_paletteTileSize + m_paletteTileSpacing;
+            float cellHeight = m_paletteTileSize + m_paletteLabelHeight + m_paletteTileSpacing;
+            int columns = Mathf.Max(1, Mathf.FloorToInt((innerWidth + m_paletteTileSpacing) / cellWidth));
+            int rows = Mathf.CeilToInt(count / (float)columns);
+            float areaHeight = Mathf.Min(rows, m_paletteVisibleRows) * cellHeight + 2f;
+
+            m_paletteScroll = GUILayout.BeginScrollView(m_paletteScroll, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, GUILayout.Height(areaHeight));
+            Rect content = GUILayoutUtility.GetRect(innerWidth, rows * cellHeight);
+
+            for(int i = 0; i < count; i++)
+            {
+                int column = i % columns;
+                int row = i / columns;
+                Rect tile = new Rect(content.x + column * cellWidth, content.y + row * cellHeight, m_paletteTileSize, m_paletteTileSize + m_paletteLabelHeight);
+                DrawPaletteTile(tile, current.entries[i], i);
+            }
+
+            GUILayout.EndScrollView();
+            DrawPrefabSettings(current);
+        }
+
+        private void DrawPrefabSettings(PrefabPalette palette)
+        {
+            int index = GridPaletteState.selectedIndex;
+
+            if(index < 0 || index >= palette.entries.Count)
+            {
+                return;
+            }
+
+            bool show = EditorPrefs.GetBool(m_showPrefabSettingsKey, false);
+            GUILayout.Space(4f);
+            bool newShow = GUILayout.Toggle(show, new GUIContent("Prefab Settings", "Show or hide the selected prefab's palette settings"), EditorStyles.miniButton);
+
+            if(newShow != show)
+            {
+                EditorPrefs.SetBool(m_showPrefabSettingsKey, newShow);
+            }
+
+            if(!newShow)
+            {
+                return;
+            }
+
+            if(m_paletteObject == null || m_paletteObject.targetObject != palette)
+            {
+                m_paletteObject = new SerializedObject(palette);
+            }
+
+            m_paletteObject.Update();
+            SerializedProperty entries = m_paletteObject.FindProperty("entries");
+
+            if(entries == null || index >= entries.arraySize)
+            {
+                return;
+            }
+
+            SerializedProperty entryProperty = entries.GetArrayElementAtIndex(index);
+            SerializedProperty child = entryProperty.Copy();
+            SerializedProperty end = entryProperty.GetEndProperty();
+            bool enterChildren = true;
+
+            float previousLabelWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = 110f;
+
+            while(child.NextVisible(enterChildren) && !SerializedProperty.EqualContents(child, end))
+            {
+                EditorGUILayout.PropertyField(child, true);
+                enterChildren = false;
+            }
+
+            EditorGUIUtility.labelWidth = previousLabelWidth;
+
+            if(m_paletteObject.ApplyModifiedProperties())
+            {
+                GridPaletteState.NotifyChanged();
+            }
+
+            PaletteEntry entry = palette.entries[index];
+            GUILayout.Label(GridFootprintUtility.DescribeFootprint(entry), EditorStyles.wordWrappedMiniLabel);
+
+            if(GUILayout.Button("Fill Manual Footprint From Bounds", EditorStyles.miniButton))
+            {
+                GridFootprintUtility.FillManualFootprint(palette, index);
+                m_paletteObject.Update();
+            }
+        }
+
+        private void DrawPaletteTile(Rect rect, PaletteEntry entry, int index)
+        {
+            bool selected = index == GridPaletteState.selectedIndex;
+            EditorGUI.DrawRect(rect, m_paletteTileColor);
+
+            if(selected)
+            {
+                EditorGUI.DrawRect(new Rect(rect.x, rect.y, rect.width, 2f), m_paletteSelectedColor);
+                EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - 2f, rect.width, 2f), m_paletteSelectedColor);
+                EditorGUI.DrawRect(new Rect(rect.x, rect.y, 2f, rect.height), m_paletteSelectedColor);
+                EditorGUI.DrawRect(new Rect(rect.xMax - 2f, rect.y, 2f, rect.height), m_paletteSelectedColor);
+            }
+
+            Rect imageRect = new Rect(rect.x + 3f, rect.y + 3f, rect.width - 6f, m_paletteTileSize - 6f);
+            Rect labelRect = new Rect(rect.x + 2f, rect.y + m_paletteTileSize - 2f, rect.width - 4f, m_paletteLabelHeight);
+            string tooltip = string.Empty;
+
+            if(entry == null || entry.prefab == null)
+            {
+                GUI.Label(labelRect, "(missing)", m_paletteLabelStyle);
+            }
+            else
+            {
+                Texture2D preview = AssetPreview.GetAssetPreview(entry.prefab);
+
+                if(preview == null)
+                {
+                    preview = AssetPreview.GetMiniThumbnail(entry.prefab);
+                }
+
+                if(preview != null)
+                {
+                    GUI.DrawTexture(imageRect, preview, ScaleMode.ScaleToFit);
+                }
+
+                GUI.Label(labelRect, entry.prefab.name, m_paletteLabelStyle);
+                tooltip = entry.prefab.name + "\n" + AssetDatabase.GetAssetPath(entry.prefab);
+            }
+
+            GUI.Label(rect, new GUIContent(string.Empty, tooltip), GUIStyle.none);
+
+            Event evt = Event.current;
+
+            if(evt.type == EventType.MouseDown && evt.button == 0 && rect.Contains(evt.mousePosition))
+            {
+                if(selected)
+                {
+                    GridPaletteState.Select(-1);
+                }
+                else
+                {
+                    GridPaletteState.Select(index);
+                }
+
+                GUIUtility.keyboardControl = 0;
+                EditorGUIUtility.editingTextField = false;
+                evt.Use();
             }
         }
 
@@ -2809,7 +3067,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 DrawShortcutHeader("Placing");
                 DrawShortcutRow("Click / Drag", "Place the selected prefab");
                 DrawShortcutRow("Shift + Drag", "Erase while held");
-                DrawShortcutRow("D", "Toggle erase mode");
+                DrawShortcutRow("X", "Toggle erase mode");
                 DrawShortcutRow("S", "Toggle stacking on top");
                 DrawShortcutRow("N", "Toggle snap to grid (freeform)");
                 DrawShortcutRow("I", "Pick prefab under cursor");
@@ -3276,7 +3534,7 @@ namespace DefaceGames.GridLevelDesign.Editor
 
                 Transform pieceTransform = instance.transform;
                 Undo.RecordObject(pieceTransform, "Grid Rotate Selection");
-                newPosition.y += pieceTransform.localPosition.y - oldPosition.y;
+                newPosition += pieceTransform.localPosition - oldPosition;
                 pieceTransform.localPosition = newPosition;
                 pieceTransform.localRotation = newRotation * (Quaternion.Inverse(oldRotation) * pieceTransform.localRotation);
 

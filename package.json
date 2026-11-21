@@ -1,6 +1,6 @@
 {
   "name": "com.defacegames.gridlevel",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "displayName": "Grid Level Design",
   "description": "Editor tool for building levels by placing 3D prefabs on an XZ, XY or YZ grid, or freely off the grid. Includes a prefab palette, ghost preview, paint/rectangle/line/fill tools, stacking, multi-cell footprints, rotation and scale tools, random variants, selection with rotate, scale and delete, and save/load to assets or JSON.",
   "unity": "6000.0",

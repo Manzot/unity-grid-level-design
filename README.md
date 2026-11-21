@@ -62,7 +62,7 @@ The sample materials use URP's Lit shader. In a Built-in or HDRP project they sh
 | Key | Action |
 |---|---|
 | Shift + Drag | Erase while held |
-| D | Toggle erase mode |
+| X | Toggle erase mode |
 | S | Toggle stacking on top of existing pieces |
 | N | Toggle snap to grid (off = freeform placement in Paint mode) |
 | I | Pick the prefab and rotation under the cursor |
@@ -76,7 +76,7 @@ The sample materials use URP's Lit shader. In a Built-in or HDRP project they sh
 | F | Focus the selection, or the last piece placed, picked or selected |
 | Shift + F | Frame the whole grid |
 
-The **Shortcuts** button in the overlay shows the same list inside the editor.
+The **Shortcuts** button in the overlay shows the same list inside the editor. While the right mouse button is held (Unity's fly mode), the tool ignores its shortcuts so W A S D Q E move the camera.
 
 ## Features
 
@@ -89,6 +89,8 @@ The **Shortcuts** button in the overlay shows the same list inside the editor.
 - **Freeform placement:** with Snap to Grid off, Paint places pieces exactly at the cursor, optionally rounded to a Fine snap increment. With Stack on they land on top of whatever is under the cursor; with Stack off they stay at the layer's height.
 - **Snap points:** in freeform, the piece under the cursor shows dots on its top, sides and bottom. Move the cursor near a dot and the next piece's matching face attaches to it, centred.
 - **Variants:** each palette entry can list variant prefabs; every placement picks one at random. Optional random rotation.
+- **Random position:** each palette entry has a Random Position offset. Every grid placement moves the piece by a random amount from 0 to that value on each grid axis; the ghost shows the exact result. Not applied in freeform.
+- **Palette in the overlay:** the **Palette** section at the bottom of the overlay shows the palette's prefabs to pick from, and **Prefab Settings** edits the selected entry, so the palette window is only needed to add or remove prefabs.
 - **Selection:** click the piece under the cursor, box select on screen or Shift-add, then rotate, scale or delete. Selected pieces are tinted and outlined.
 - **Undo:** every stroke, fill, rotation, delete, load and clear is a single undo step.
 

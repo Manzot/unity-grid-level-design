@@ -150,5 +150,45 @@ namespace DefaceGames.GridLevelDesign.Editor
                 }
             }
         }
+
+        public static string DescribeFootprint(PaletteEntry entry)
+        {
+            if(entry.manualFootprint)
+            {
+                return "Footprint: " + entry.GetFootprint().x + " x " + entry.GetFootprint().y + " cells (manual)";
+            }
+
+            GridLevel currentLevel = FindLevel();
+            Vector3 entryScale = entry.GetScale();
+
+            if(entry.fitToCell && currentLevel != null)
+            {
+                entryScale = Vector3.one * GetFitFactor(currentLevel, entry.prefab);
+            }
+
+            Vector2Int live = ComputeFor(currentLevel, entry.prefab, entryScale);
+            string text = "Footprint: " + live.x + " x " + live.y + " cells (automatic, from the current grid). Tick Manual Footprint to set it yourself.";
+
+            if(entry.fitToCell)
+            {
+                text += "\nFit to Cell is on: scaled " + entryScale.x.ToString("0.##") + "x to fill one cell; the Scale field is ignored.";
+            }
+
+            return text;
+        }
+
+        public static void FillManualFootprint(PrefabPalette palette, int index)
+        {
+            if(palette == null || index < 0 || index >= palette.entries.Count)
+            {
+                return;
+            }
+
+            Undo.RecordObject(palette, "Auto Footprint");
+            palette.entries[index].footprint = ComputeFor(FindLevel(), palette.entries[index].prefab, palette.entries[index].GetScale());
+            palette.entries[index].manualFootprint = true;
+            EditorUtility.SetDirty(palette);
+            GridPaletteState.NotifyChanged();
+        }
     }
 }
