@@ -11,6 +11,7 @@ All notable changes to this package are documented here.
 - Palette section in the overlay: an expandable list of the palette's prefabs to pick from, with the palette asset field and an Open Window button.
 - Prefab Settings section in the overlay for the selected palette entry, including the footprint readout and Fill Manual Footprint From Bounds.
 - Random Position on palette entries: each grid placement is offset by a random amount from 0 to the set value on each grid axis. Not applied in freeform.
+- Snap Centres toggle for freeform snapping (key C, shown in the overlay when Snap to Grid is off). Bounds, the default, places snap points at the centre of each side of the piece's box; Faces keeps the previous flat-face centres for pieces with off-centre openings.
 
 ### Changed
 - The palette window's prefab grid shows about three rows and scrolls, and the entry settings below it have their own scroll area, so they are no longer squeezed out by large palettes.
@@ -18,6 +19,7 @@ All notable changes to this package are documented here.
 
 ### Fixed
 - Holding the right mouse button to fly with W A S D toggled Stack (S) and Erase (D). Tool shortcuts are now ignored while the right mouse button is held.
+- Side snapping on uneven or organic meshes landed off-centre, because a bulge on one edge was taken as that side's face. Bounds snap centres fix this.
 
 ## [0.3.0] - 2026-11-19
 

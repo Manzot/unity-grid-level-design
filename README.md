@@ -65,6 +65,7 @@ The sample materials use URP's Lit shader. In a Built-in or HDRP project they sh
 | X | Toggle erase mode |
 | S | Toggle stacking on top of existing pieces |
 | N | Toggle snap to grid (off = freeform placement in Paint mode) |
+| C | Freeform snap centres: Bounds (box of the piece) or Faces (flat faces, for off-centre openings) |
 | I | Pick the prefab and rotation under the cursor |
 | , and . | Rotate left / right by the step angle (in Select mode, rotates the selection) |
 | / | Cycle the rotation axis X / Y / Z |
@@ -87,7 +88,7 @@ The **Shortcuts** button in the overlay shows the same list inside the editor. W
 - **Rotation:** any step angle, default 90, around X, Y or Z. Multi-cell footprints swap on quarter turns; tilted pieces are re-seated on the grid.
 - **Scale:** each palette entry has a Scale setting and an optional Fit to Cell, and the overlay's scale tool resizes the next piece or the selection by an adjustable step.
 - **Freeform placement:** with Snap to Grid off, Paint places pieces exactly at the cursor, optionally rounded to a Fine snap increment. With Stack on they land on top of whatever is under the cursor; with Stack off they stay at the layer's height.
-- **Snap points:** in freeform, the piece under the cursor shows dots on its top, sides and bottom. Move the cursor near a dot and the next piece's matching face attaches to it, centred.
+- **Snap points:** in freeform, the piece under the cursor shows dots on its top, sides and bottom. Move the cursor near a dot and the next piece's matching face attaches to it, centred. **Snap Centres** (C) picks where the dots sit: Bounds, the default, uses the piece's box so uneven or organic meshes line up centred; Faces uses the real flat faces, so pipe openings that are off-centre line up.
 - **Variants:** each palette entry can list variant prefabs; every placement picks one at random. Optional random rotation.
 - **Random position:** each palette entry has a Random Position offset. Every grid placement moves the piece by a random amount from 0 to that value on each grid axis; the ghost shows the exact result. Not applied in freeform.
 - **Palette in the overlay:** the **Palette** section at the bottom of the overlay shows the palette's prefabs to pick from, and **Prefab Settings** edits the selected entry, so the palette window is only needed to add or remove prefabs.

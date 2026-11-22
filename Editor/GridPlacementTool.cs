@@ -141,6 +141,10 @@ namespace DefaceGames.GridLevelDesign.Editor
         [System.NonSerialized] private GameObject m_anchorPrefab;
         private Quaternion m_anchorRotation;
         private Vector3 m_anchorScale;
+        private bool m_anchorBoundsMode;
+        private bool m_faceBoundsMode;
+        private bool m_snapToBounds = true;
+        private bool m_centreKeyHeld;
         private readonly Vector3[] m_anchorValues = new Vector3[6];
         private float m_fineSnap;
         private bool m_hasFreePoint;
@@ -351,6 +355,10 @@ namespace DefaceGames.GridLevelDesign.Editor
             {
                 m_snapKeyHeld = false;
             }
+            else if(evt.keyCode == KeyCode.C)
+            {
+                m_centreKeyHeld = false;
+            }
         }
 
         // Called by the overlay panel when it holds keyboard focus, so shortcuts keep working after a
@@ -423,6 +431,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 m_stackKeyHeld = false;
                 m_eraseKeyHeld = false;
                 m_snapKeyHeld = false;
+                m_centreKeyHeld = false;
             }
 
             EditorGUIUtility.editingTextField = false;
@@ -686,7 +695,7 @@ namespace DefaceGames.GridLevelDesign.Editor
         {
             Matrix4x4 matrix = level.transform.worldToLocalMatrix * piece.transform.localToWorldMatrix;
 
-            if(piece == m_facePiece && matrix == m_faceMatrix)
+            if(piece == m_facePiece && matrix == m_faceMatrix && m_faceBoundsMode == m_snapToBounds)
             {
                 return true;
             }
@@ -723,16 +732,11 @@ namespace DefaceGames.GridLevelDesign.Editor
                     return false;
                 }
 
-                m_topFaceMin = new Vector3(bounds.min.x, bounds.max.y, bounds.min.z);
-                m_topFaceMax = bounds.max;
-
-                for(int i = 0; i < m_sideCentres.Length; i++)
-                {
-                    int axis = m_faceAxes[i + 1];
-                    Vector3 centre = bounds.center;
-                    centre[axis] = m_facePositive[i + 1] ? bounds.max[axis] : bounds.min[axis];
-                    m_sideCentres[i] = centre;
-                }
+                SetFacesFromBounds(bounds);
+            }
+            else if(m_snapToBounds)
+            {
+                SetFacesFromBounds(GetPointBounds(m_vertexBuffer));
             }
             else
             {
@@ -749,7 +753,39 @@ namespace DefaceGames.GridLevelDesign.Editor
 
             m_facePiece = piece;
             m_faceMatrix = matrix;
+            m_faceBoundsMode = m_snapToBounds;
             return true;
+        }
+
+        private void SetFacesFromBounds(Bounds bounds)
+        {
+            m_topFaceMin = new Vector3(bounds.min.x, bounds.max.y, bounds.min.z);
+            m_topFaceMax = bounds.max;
+
+            for(int i = 0; i < m_sideCentres.Length; i++)
+            {
+                m_sideCentres[i] = GetBoundsFaceCentre(bounds, i + 1);
+            }
+        }
+
+        private Vector3 GetBoundsFaceCentre(Bounds bounds, int face)
+        {
+            int axis = m_faceAxes[face];
+            Vector3 centre = bounds.center;
+            centre[axis] = m_facePositive[face] ? bounds.max[axis] : bounds.min[axis];
+            return centre;
+        }
+
+        private static Bounds GetPointBounds(List<Vector3> points)
+        {
+            Bounds bounds = new Bounds(points[0], Vector3.zero);
+
+            for(int i = 1; i < points.Count; i++)
+            {
+                bounds.Encapsulate(points[i]);
+            }
+
+            return bounds;
         }
 
         private static int GetOppositeFace(int face)
@@ -770,7 +806,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             Quaternion rootRotation = rotation * prefab.transform.localRotation;
             Vector3 scale = GetPlacementScale(entry, prefab);
 
-            if(prefab == m_anchorPrefab && rootRotation == m_anchorRotation && scale == m_anchorScale)
+            if(prefab == m_anchorPrefab && rootRotation == m_anchorRotation && scale == m_anchorScale && m_anchorBoundsMode == m_snapToBounds)
             {
                 return m_anchorValues[face];
             }
@@ -793,6 +829,12 @@ namespace DefaceGames.GridLevelDesign.Editor
                     continue;
                 }
 
+                if(m_snapToBounds)
+                {
+                    m_anchorValues[i] = GetBoundsFaceCentre(GetPointBounds(m_vertexBuffer), i);
+                    continue;
+                }
+
                 Vector3 min;
                 Vector3 max;
                 GetFlatFace(m_vertexBuffer, m_faceAxes[i], m_facePositive[i], out min, out max);
@@ -802,6 +844,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             m_anchorPrefab = prefab;
             m_anchorRotation = rootRotation;
             m_anchorScale = scale;
+            m_anchorBoundsMode = m_snapToBounds;
             return m_anchorValues[face];
         }
 
@@ -2106,6 +2149,14 @@ namespace DefaceGames.GridLevelDesign.Editor
                     }
                 }
             }
+            else if(evt.keyCode == KeyCode.C)
+            {
+                if(!m_centreKeyHeld)
+                {
+                    m_centreKeyHeld = true;
+                    m_snapToBounds = !m_snapToBounds;
+                }
+            }
             else if(evt.keyCode == KeyCode.RightBracket)
             {
                 Undo.RecordObject(level, "Grid Layer Up");
@@ -2665,6 +2716,13 @@ namespace DefaceGames.GridLevelDesign.Editor
 
             GUILayout.EndHorizontal();
 
+            if(!m_snapToGrid)
+            {
+                GUILayout.BeginHorizontal();
+                DrawToggle(ref m_snapToBounds, m_snapToBounds ? "Snap Centres: Bounds (C)" : "Snap Centres: Faces (C)", new Color(1f, 0.8f, 0.3f, 1f));
+                GUILayout.EndHorizontal();
+            }
+
             GUILayout.Space(4f);
             GUILayout.BeginHorizontal();
 
@@ -3070,6 +3128,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                 DrawShortcutRow("X", "Toggle erase mode");
                 DrawShortcutRow("S", "Toggle stacking on top");
                 DrawShortcutRow("N", "Toggle snap to grid (freeform)");
+                DrawShortcutRow("C", "Snap centres: bounds / faces");
                 DrawShortcutRow("I", "Pick prefab under cursor");
                 DrawShortcutRow("Esc", "Cancel current drag");
 
