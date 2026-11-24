@@ -119,9 +119,11 @@ namespace DefaceGames.GridLevelDesign.Editor
         private bool m_snapKeyHeld;
 
         private const float m_snapPixelRadius = 20f;
-        private const float m_cornerSnapPixelRadius = 28f;
+        private const float m_centreSnapPixelRadius = 28f;
+        private const float m_snapDotSize = 0.03f;
+        private const float m_centreSnapDotSize = 0.045f;
+        private const float m_activeSnapDotSize = 0.06f;
         private static readonly Color m_sideSnapColor = new Color(0.3f, 0.9f, 1f, 0.9f);
-        private static readonly int[] m_faceAxes = { 1, 0, 0, 2, 2, 1 };
         private static readonly bool[] m_facePositive = { true, true, false, true, false, false };
         private readonly List<SnapPoint> m_snapPoints = new List<SnapPoint>();
         private readonly List<SnapPoint> m_candidatePoints = new List<SnapPoint>();
@@ -143,6 +145,8 @@ namespace DefaceGames.GridLevelDesign.Editor
         private Vector3 m_anchorScale;
         private bool m_anchorBoundsMode;
         private bool m_faceBoundsMode;
+        private GridPlane m_facePlane;
+        private GridPlane m_anchorPlane;
         private bool m_snapToBounds = true;
         private bool m_centreKeyHeld;
         private readonly Vector3[] m_anchorValues = new Vector3[6];
@@ -485,18 +489,20 @@ namespace DefaceGames.GridLevelDesign.Editor
             UpdateSnapPoints(level);
         }
 
-        // Faces: 0 is the top, 1 to 4 the +X, -X, +Z and -Z sides, 5 the bottom.
+        // Faces follow the grid plane: 0 is the top (+normal), 1 to 4 the +U, -U, +V and -V sides, 5 the bottom.
         private struct SnapPoint
         {
             public Vector3 position;
             public int face;
             public bool corner;
+            public bool centre;
 
-            public SnapPoint(Vector3 position, int face, bool corner)
+            public SnapPoint(Vector3 position, int face, bool corner, bool centre = false)
             {
                 this.position = position;
                 this.face = face;
                 this.corner = corner;
+                this.centre = centre;
             }
         }
 
@@ -510,7 +516,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             m_activeSnapIndex = -1;
             m_snapFace = 0;
 
-            if(!IsFreeform() || level.plane != GridPlane.XZ)
+            if(!IsFreeform())
             {
                 m_snapPiece = null;
                 return;
@@ -564,20 +570,22 @@ namespace DefaceGames.GridLevelDesign.Editor
                 return;
             }
 
+            int u = level.uAxis;
+            int v = level.vAxis;
             Vector3 min = m_topFaceMin;
             Vector3 max = m_topFaceMax;
-            float y = max.y;
-            float midX = (min.x + max.x) * 0.5f;
-            float midZ = (min.z + max.z) * 0.5f;
-            output.Add(new SnapPoint(new Vector3(midX, y, midZ), 0, false));
-            output.Add(new SnapPoint(new Vector3(min.x, y, min.z), 0, true));
-            output.Add(new SnapPoint(new Vector3(max.x, y, min.z), 0, true));
-            output.Add(new SnapPoint(new Vector3(min.x, y, max.z), 0, true));
-            output.Add(new SnapPoint(new Vector3(max.x, y, max.z), 0, true));
-            output.Add(new SnapPoint(new Vector3(midX, y, min.z), 0, false));
-            output.Add(new SnapPoint(new Vector3(midX, y, max.z), 0, false));
-            output.Add(new SnapPoint(new Vector3(min.x, y, midZ), 0, false));
-            output.Add(new SnapPoint(new Vector3(max.x, y, midZ), 0, false));
+            float top = max[level.normalAxis];
+            float midU = (min[u] + max[u]) * 0.5f;
+            float midV = (min[v] + max[v]) * 0.5f;
+            output.Add(new SnapPoint(GetPlanePoint(level, midU, midV, top), 0, false, true));
+            output.Add(new SnapPoint(GetPlanePoint(level, min[u], min[v], top), 0, true));
+            output.Add(new SnapPoint(GetPlanePoint(level, max[u], min[v], top), 0, true));
+            output.Add(new SnapPoint(GetPlanePoint(level, min[u], max[v], top), 0, true));
+            output.Add(new SnapPoint(GetPlanePoint(level, max[u], max[v], top), 0, true));
+            output.Add(new SnapPoint(GetPlanePoint(level, midU, min[v], top), 0, false));
+            output.Add(new SnapPoint(GetPlanePoint(level, midU, max[v], top), 0, false));
+            output.Add(new SnapPoint(GetPlanePoint(level, min[u], midV, top), 0, false));
+            output.Add(new SnapPoint(GetPlanePoint(level, max[u], midV, top), 0, false));
 
             Camera camera = Camera.current;
 
@@ -597,7 +605,7 @@ namespace DefaceGames.GridLevelDesign.Editor
                     continue;
                 }
 
-                output.Add(new SnapPoint(m_sideCentres[i], face, false));
+                output.Add(new SnapPoint(m_sideCentres[i], face, false, true));
             }
         }
 
@@ -605,7 +613,7 @@ namespace DefaceGames.GridLevelDesign.Editor
         private float GetFacing(GridLevel level, Camera camera, int face)
         {
             Vector3 normal = Vector3.zero;
-            normal[m_faceAxes[face]] = m_facePositive[face] ? 1f : -1f;
+            normal[GetFaceAxis(level, face)] = m_facePositive[face] ? 1f : -1f;
             Vector3 world = level.transform.TransformPoint(m_sideCentres[face - 1]);
             Vector3 toCamera = camera.orthographic ? -camera.transform.forward : (camera.transform.position - world).normalized;
             return Vector3.Dot(level.transform.TransformDirection(normal).normalized, toCamera);
@@ -620,7 +628,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             {
                 Vector2 screen = HandleUtility.WorldToGUIPoint(level.transform.TransformPoint(points[i].position));
                 float distance = Vector2.Distance(screen, m_mousePosition);
-                float radius = points[i].corner ? m_cornerSnapPixelRadius : m_snapPixelRadius;
+                float radius = points[i].centre ? m_centreSnapPixelRadius : m_snapPixelRadius;
 
                 if(distance <= radius && distance < bestDistance)
                 {
@@ -695,7 +703,7 @@ namespace DefaceGames.GridLevelDesign.Editor
         {
             Matrix4x4 matrix = level.transform.worldToLocalMatrix * piece.transform.localToWorldMatrix;
 
-            if(piece == m_facePiece && matrix == m_faceMatrix && m_faceBoundsMode == m_snapToBounds)
+            if(piece == m_facePiece && matrix == m_faceMatrix && m_faceBoundsMode == m_snapToBounds && m_facePlane == level.plane)
             {
                 return true;
             }
@@ -732,21 +740,21 @@ namespace DefaceGames.GridLevelDesign.Editor
                     return false;
                 }
 
-                SetFacesFromBounds(bounds);
+                SetFacesFromBounds(level, bounds);
             }
             else if(m_snapToBounds)
             {
-                SetFacesFromBounds(GetPointBounds(m_vertexBuffer));
+                SetFacesFromBounds(level, GetPointBounds(m_vertexBuffer));
             }
             else
             {
-                GetFlatFace(m_vertexBuffer, 1, true, out m_topFaceMin, out m_topFaceMax);
+                GetFlatFace(m_vertexBuffer, level.normalAxis, true, out m_topFaceMin, out m_topFaceMax);
 
                 for(int i = 0; i < m_sideCentres.Length; i++)
                 {
                     Vector3 min;
                     Vector3 max;
-                    GetFlatFace(m_vertexBuffer, m_faceAxes[i + 1], m_facePositive[i + 1], out min, out max);
+                    GetFlatFace(m_vertexBuffer, GetFaceAxis(level, i + 1), m_facePositive[i + 1], out min, out max);
                     m_sideCentres[i] = (min + max) * 0.5f;
                 }
             }
@@ -754,23 +762,25 @@ namespace DefaceGames.GridLevelDesign.Editor
             m_facePiece = piece;
             m_faceMatrix = matrix;
             m_faceBoundsMode = m_snapToBounds;
+            m_facePlane = level.plane;
             return true;
         }
 
-        private void SetFacesFromBounds(Bounds bounds)
+        private void SetFacesFromBounds(GridLevel level, Bounds bounds)
         {
-            m_topFaceMin = new Vector3(bounds.min.x, bounds.max.y, bounds.min.z);
+            m_topFaceMin = bounds.min;
+            m_topFaceMin[level.normalAxis] = bounds.max[level.normalAxis];
             m_topFaceMax = bounds.max;
 
             for(int i = 0; i < m_sideCentres.Length; i++)
             {
-                m_sideCentres[i] = GetBoundsFaceCentre(bounds, i + 1);
+                m_sideCentres[i] = GetBoundsFaceCentre(level, bounds, i + 1);
             }
         }
 
-        private Vector3 GetBoundsFaceCentre(Bounds bounds, int face)
+        private Vector3 GetBoundsFaceCentre(GridLevel level, Bounds bounds, int face)
         {
-            int axis = m_faceAxes[face];
+            int axis = GetFaceAxis(level, face);
             Vector3 centre = bounds.center;
             centre[axis] = m_facePositive[face] ? bounds.max[axis] : bounds.min[axis];
             return centre;
@@ -788,6 +798,25 @@ namespace DefaceGames.GridLevelDesign.Editor
             return bounds;
         }
 
+        private static int GetFaceAxis(GridLevel level, int face)
+        {
+            if(face == 0 || face == 5)
+            {
+                return level.normalAxis;
+            }
+
+            return face <= 2 ? level.uAxis : level.vAxis;
+        }
+
+        private static Vector3 GetPlanePoint(GridLevel level, float u, float v, float n)
+        {
+            Vector3 point = Vector3.zero;
+            point[level.uAxis] = u;
+            point[level.vAxis] = v;
+            point[level.normalAxis] = n;
+            return point;
+        }
+
         private static int GetOppositeFace(int face)
         {
             if(face == 0 || face == 5)
@@ -800,13 +829,13 @@ namespace DefaceGames.GridLevelDesign.Editor
 
         // Centres of the ghost's real faces relative to its pivot, numbered like the snap faces (the bottom
         // face is an elbow's opening, say).
-        private Vector3 GetGhostAnchor(PaletteEntry entry, Quaternion rotation, int face)
+        private Vector3 GetGhostAnchor(GridLevel level, PaletteEntry entry, Quaternion rotation, int face)
         {
             GameObject prefab = m_nextPrefab;
             Quaternion rootRotation = rotation * prefab.transform.localRotation;
             Vector3 scale = GetPlacementScale(entry, prefab);
 
-            if(prefab == m_anchorPrefab && rootRotation == m_anchorRotation && scale == m_anchorScale && m_anchorBoundsMode == m_snapToBounds)
+            if(prefab == m_anchorPrefab && rootRotation == m_anchorRotation && scale == m_anchorScale && m_anchorBoundsMode == m_snapToBounds && m_anchorPlane == level.plane)
             {
                 return m_anchorValues[face];
             }
@@ -831,13 +860,13 @@ namespace DefaceGames.GridLevelDesign.Editor
 
                 if(m_snapToBounds)
                 {
-                    m_anchorValues[i] = GetBoundsFaceCentre(GetPointBounds(m_vertexBuffer), i);
+                    m_anchorValues[i] = GetBoundsFaceCentre(level, GetPointBounds(m_vertexBuffer), i);
                     continue;
                 }
 
                 Vector3 min;
                 Vector3 max;
-                GetFlatFace(m_vertexBuffer, m_faceAxes[i], m_facePositive[i], out min, out max);
+                GetFlatFace(m_vertexBuffer, GetFaceAxis(level, i), m_facePositive[i], out min, out max);
                 m_anchorValues[i] = (min + max) * 0.5f;
             }
 
@@ -845,6 +874,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             m_anchorRotation = rootRotation;
             m_anchorScale = scale;
             m_anchorBoundsMode = m_snapToBounds;
+            m_anchorPlane = level.plane;
             return m_anchorValues[face];
         }
 
@@ -935,10 +965,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             {
                 localPoint = level.transform.InverseTransformPoint(worldPoint);
 
-                if(level.plane == GridPlane.XZ)
-                {
-                    localPoint.y = level.layerOffset;
-                }
+                localPoint[level.normalAxis] = level.layerOffset;
             }
             else if(!level.RaycastPlane(ray, out localPoint))
             {
@@ -1276,10 +1303,12 @@ namespace DefaceGames.GridLevelDesign.Editor
             else
             {
                 Bounds tilted = GetNextPieceBounds(entry, localRotation);
-                localPosition = m_freePoint - new Vector3(tilted.center.x, tilted.min.y, tilted.center.z);
+                Vector3 seat = tilted.center;
+                seat[level.normalAxis] = tilted.min[level.normalAxis];
+                localPosition = m_freePoint - seat;
             }
 
-            if(m_nextPrefab == null || level.plane != GridPlane.XZ)
+            if(m_nextPrefab == null)
             {
                 return;
             }
@@ -1288,7 +1317,7 @@ namespace DefaceGames.GridLevelDesign.Editor
             // highest piece below it with Stack on, and stays at the layer's height with Stack off.
             if(m_hasSnapPoint)
             {
-                localPosition = m_snapPoint - GetGhostAnchor(entry, localRotation, GetOppositeFace(m_snapFace));
+                localPosition = m_snapPoint - GetGhostAnchor(level, entry, localRotation, GetOppositeFace(m_snapFace));
                 return;
             }
 
@@ -1299,14 +1328,17 @@ namespace DefaceGames.GridLevelDesign.Editor
 
             Bounds ghost = GetNextPieceBounds(entry, localRotation);
             ghost.center += localPosition;
-            localPosition.y += GetDropLift(level, ghost);
+            localPosition[level.normalAxis] += GetDropLift(level, ghost);
         }
 
         // How far the ghost must rise to rest on the highest placed piece under its area. Pieces that only
         // touch its sides do not count.
         private static float GetDropLift(GridLevel level, Bounds ghost)
         {
-            float top = ghost.min.y;
+            int n = level.normalAxis;
+            int u = level.uAxis;
+            int v = level.vAxis;
+            float top = ghost.min[n];
             Bounds shrunk = ShrinkBounds(ghost);
 
             for(int i = 0; i < level.cells.Count; i++)
@@ -1320,16 +1352,16 @@ namespace DefaceGames.GridLevelDesign.Editor
                 }
 
                 Bounds other = ShrinkBounds(bounds);
-                bool overlapsX = other.min.x < shrunk.max.x && other.max.x > shrunk.min.x;
-                bool overlapsZ = other.min.z < shrunk.max.z && other.max.z > shrunk.min.z;
+                bool overlapsU = other.min[u] < shrunk.max[u] && other.max[u] > shrunk.min[u];
+                bool overlapsV = other.min[v] < shrunk.max[v] && other.max[v] > shrunk.min[v];
 
-                if(overlapsX && overlapsZ && bounds.max.y > top)
+                if(overlapsU && overlapsV && bounds.max[n] > top)
                 {
-                    top = bounds.max.y;
+                    top = bounds.max[n];
                 }
             }
 
-            return top - ghost.min.y;
+            return top - ghost.min[n];
         }
 
         // With Fit to Cell on, the entry's Scale field is replaced by the uniform factor that makes the
@@ -2500,7 +2532,14 @@ namespace DefaceGames.GridLevelDesign.Editor
                     Handles.color = new Color(1f, 1f, 1f, 0.85f);
                 }
 
-                Handles.DotHandleCap(0, world, Quaternion.identity, HandleUtility.GetHandleSize(world) * (active ? 0.06f : 0.03f), EventType.Repaint);
+                float dotSize = m_snapPoints[i].centre ? m_centreSnapDotSize : m_snapDotSize;
+
+                if(active)
+                {
+                    dotSize = m_activeSnapDotSize;
+                }
+
+                Handles.DotHandleCap(0, world, Quaternion.identity, HandleUtility.GetHandleSize(world) * dotSize, EventType.Repaint);
             }
 
             Handles.zTest = previousZTest;
